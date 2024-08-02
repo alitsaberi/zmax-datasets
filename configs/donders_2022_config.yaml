@@ -1,7 +1,7 @@
 name: donders_2022
 data_dir: /project/3013097.06/Data
-subject_regex: "s(?P<id>\d+)" # Subject ID must be incapsulated in a group with name "id"
-session_regex: "n(?P<id>\d+)" # Session ID must be incapsulated in a group with name "id"
+subject_regex: s(?P<id>\d+) # Subject ID must be incapsulated in a group with name "id"
+session_regex: n(?P<id>\d+) # Session ID must be incapsulated in a group with name "id"
 zmax_dir_name: zmax
 psg_dir_name: somno
 # selected_subjects: []

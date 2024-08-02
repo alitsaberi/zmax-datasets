@@ -41,7 +41,12 @@ class Donders2022(Dataset):
         self.excluded_sessions = excluded_sessions
         self.transform = transform
 
-        # TODO: validate regexes
+        for regex_name in ["subject_regex", "session_regex"]:
+            regex = getattr(self, regex_name)
+            if self._ID_GROUP_NAME not in regex.groupindex:
+                raise ValueError(
+                    f"{regex_name} must include a group named '{self._ID_GROUP_NAME}'"
+                )
 
         self.session_dirs = self._get_session_dirs()
 
@@ -80,12 +85,12 @@ class Donders2022(Dataset):
             logger.debug(f"{entity_dir} doesn't match the regex {entity_regex}.")
             return False
 
-        selected = getattr(self, f"selected_{entity_type}s", None)
+        selected = getattr(self, f"selected_{entity_type.value}s", None)
         if selected and entity_id not in selected:
             logger.debug(f"{entity_dir} is not selected.")
             return False
 
-        excluded = getattr(self, f"excluded_{entity_type}s", None)
+        excluded = getattr(self, f"excluded_{entity_type.value}s", None)
         if excluded and entity_id in excluded:
             logger.debug(f"{entity_dir} is excluded.")
             return False
