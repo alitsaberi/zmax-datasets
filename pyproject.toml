@@ -5,6 +5,9 @@ description = ""
 authors = ["Ali Saberi <ali.saberi96@gmail.com>"]
 readme = "README.md"
 package-mode = false
+packages = [
+    { include = "zmax-real-time", from = "src" },
+]
 
 [tool.poetry.dependencies]
 python = "^3.10"
