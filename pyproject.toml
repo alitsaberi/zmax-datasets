@@ -10,6 +10,8 @@ python = "^3.10"
 torch = "^2.4.0"
 numpy = "^2.0.1"
 pandas = "^2.2.2"
+jupyterlab = {version = "^4.2.4", optional = true}
+mne = "^1.7.1"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.5"
@@ -17,6 +19,9 @@ pre-commit = "^3.8.0"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.3.2"
+
+[tool.poetry.extras]
+jupyter = ["jupyterlab"]
 
 [tool.ruff]
 exclude = [
