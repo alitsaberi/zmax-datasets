@@ -12,6 +12,7 @@ numpy = "^2.0.1"
 pandas = "^2.2.2"
 jupyterlab = {version = "^4.2.4", optional = true}
 mne = "^1.7.1"
+typing-extensions = "^4.12.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.5"

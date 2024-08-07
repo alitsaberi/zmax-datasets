@@ -10,10 +10,12 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
+from zmax_real_time import settings
 from zmax_real_time.datasets.utils import extract_id_by_regex, rescale_and_clip_data
-from zmax_real_time.utils import load_yaml_config
+from zmax_real_time.utils.helpers import load_yaml_config
+from zmax_real_time.utils.logger import setup_logging
 
-logger = logging.getLogger(__name__)  # TODO: configure logger
+logger = logging.getLogger("zmax_real_time")
 
 
 class Donders2022(Dataset):
@@ -82,7 +84,7 @@ class Donders2022(Dataset):
             ):
                 logger.debug(
                     "Skipping recording with because some files are missing:"
-                    " {subject_id}-{session_id}"
+                    f" {subject_id}-{session_id}"
                 )
                 continue
 
@@ -184,9 +186,9 @@ class Donders2022(Dataset):
 
 
 if __name__ == "__main__":
-    CONFIG_PATH = Path(__file__).parent.parent.parent / "configs" / "donders_2022.yaml"
-    config = load_yaml_config(CONFIG_PATH)
-    print(config)
+    config_file = settings.CONFIG_DIR / "donders_2022.yaml"
+    setup_logging()
+    config = load_yaml_config(config_file)
     dataset = Donders2022(**config["datasets"]["donders_2022"])
     print(len(dataset))
     print(dataset.recordings)
