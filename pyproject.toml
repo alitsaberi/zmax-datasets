@@ -13,6 +13,9 @@ pandas = "^2.2.2"
 jupyterlab = {version = "^4.2.4", optional = true}
 mne = "^1.7.1"
 typing-extensions = "^4.12.2"
+h5py = "^3.11.0"
+scipy = "^1.14.0"
+psg-utils = "^0.1.6"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.5"

@@ -3,8 +3,8 @@ datasets:
     data_dir: /project/3013097.06/Data
     channel_names: [EEG L, EEG R]
     annotations: [sleep_stage]
-    # selected_subjects: []
-    # selected_sessions: []
+    selected_subjects: [33]
+    selected_sessions: [15]
     # excluded_subjects: []
     # excluded_sessions: []
     # excluded_sessions_for_subjects:

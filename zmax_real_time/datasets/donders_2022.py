@@ -4,10 +4,13 @@ from collections.abc import Callable
 from itertools import chain
 from pathlib import Path
 
+import h5py
 import mne
 import numpy as np
 import pandas as pd
 import torch
+from psg_utils.hypnogram.utils import squeeze_events
+from scipy.signal import resample_poly
 from torch.utils.data import Dataset
 
 from zmax_real_time import settings
@@ -47,7 +50,6 @@ class Donders2022(Dataset):
         self.transform = transform
 
         self.recordings = self._collect_recordings()
-        # TODO: prepare recordings by creating a file
 
     def _collect_recordings(self) -> list[dict]:
         recordings = []
@@ -121,40 +123,42 @@ class Donders2022(Dataset):
             )
         )
 
-    def _prepare_recording(self, recording):
-        channel_data = []
-        times = None
-        for channel in self.channel_names:
-            channel_file = recording["zmax_dir"] / f"{channel}.edf"
-            raw = mne.io.read_raw_edf(channel_file, preload=True)
-            raw = self._preprocess_channel(raw)
+    def preprare_recordings(self) -> None:
+        total_recordings = len(self.recordings)
+        for i, recording in enumerate(self.recordings):
+            logger.info(
+                f"Preparing recording {i}/{total_recordings}:"
+                " {recording['subject_id']}-{recording['session_id']}"
+            )
+            self._prepare_recording(recording)
+            self._extract_hypnogram(recording)
 
-            if times is None:
-                times = raw.times
-            elif not np.array_equal(times, raw.times):
-                raise ValueError(
-                    f"Time mismatch for {channel} in recording"
-                    f" {recording['subject_id']}-{recording['session_id']}"
-                )
-
-            channel_data.append(raw.get_data())
-
-        # Combine all channels
-        combined_data = np.concatenate(channel_data, axis=0)
-        recording["channel_data"] = combined_data
-        recording["times"] = times
-
-        annotations = pd.read_csv(
-            recording["zmax_dir"]
-            / self._MANUAL_SLEEP_SCORES_FILE_NAME_PATTERN.format(
-                subject_id=recording["subject_id"], session_id=recording["session_id"]
-            ),
-            delimiter=" ",
-            names=["sleep_stage", "arousal"],
-            usecols=self.annotations,
+    def _prepare_recording(self, recording: dict) -> None:
+        out_dir = Path(
+            settings.BASE_DIR
+            / "data"
+            / "donders_2022"
+            / f"s{recording['subject_id']}-n{recording['session_id']}"
         )
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with h5py.File(
+            out_dir / f"s{recording['subject_id']}-n{recording['session_id']}.h5", "w"
+        ) as out_f:
+            out_f.create_group("channels")
+            for i, channel in enumerate(self.channel_names):
+                channel_file = recording["zmax_dir"] / f"{channel}.edf"
+                raw = mne.io.read_raw_edf(channel_file, preload=False)
+                data = raw.get_data().squeeze()
+                data = resample_poly(data, 128, raw.info["sfreq"], axis=0)
 
-        print(annotations)
+                dataset = out_f["channels"].create_dataset(
+                    channel, data=data, chunks=True, compression="gzip"
+                )
+                dataset.attrs["channel_index"] = i
+
+                del data, raw
+
+            out_f.attrs["sample_rate"] = 128
 
     def _preprocess_channel(self, raw: mne.io.Raw) -> mne.io.Raw:
         raw.filter(l_freq=0.3, h_freq=30)
@@ -163,12 +167,64 @@ class Donders2022(Dataset):
         raw.apply_function(lambda x: rescale_and_clip_data(x))
         return raw
 
+    def _extract_hypnogram(self, recording: dict):
+        annotations = pd.read_csv(
+            recording["zmax_dir"]
+            / self._MANUAL_SLEEP_SCORES_FILE_NAME_PATTERN.format(
+                subject_id=recording["subject_id"], session_id=recording["session_id"]
+            ),
+            delimiter="\t",
+            names=["sleep_stage", "arousal"],
+            usecols=self.annotations,
+        )
+
+        map_ = np.vectorize(
+            {0: "W", 1: "N1", 2: "N2", 3: "N3", 4: "REM", -1: "UNKNOWN"}.get
+        )
+
+        stages = map_(annotations["sleep_stage"].values)
+        stages = stages.squeeze()
+
+        inits, durs, stages = self.ndarray_to_ids_format(
+            stages=stages,
+            period_length=30,
+        )
+        inits, durs, stages = squeeze_events(inits, durs, stages)
+
+        out_dir = Path(
+            settings.BASE_DIR
+            / "data"
+            / "donders_2022"
+            / f"s{recording['subject_id']}-n{recording['session_id']}"
+        )
+        out = out_dir / f"s{recording['subject_id']}-n{recording['session_id']}.ids"
+        with open(out, "w") as out_f:
+            for i, d, s in zip(inits, durs, stages, strict=False):
+                out_f.write(f"{int(i)},{int(d)},{s}\n")
+
+    def ndarray_to_ids_format(self, stages, period_length):
+        start_times = []
+        durations = []
+
+        start_time = 0
+        # Process each sleep stage
+        for _ in stages:
+            # Create a row with start time, duration, and sleep stage
+            start_times.append(start_time)
+
+            # Append the duration to the durations array (all durations are 30 seconds)
+            durations.append(period_length)
+
+            # Increment start_time by the epoch duration
+            start_time += period_length
+
+        return np.asarray(start_times, float), np.asarray(durations, float), stages
+
     def __len__(self):
         return len(self.recordings)
 
     def __getitem__(self, idx):
-        recording = self.recordings[idx]
-        self._prepare_recording(recording)
+        return self.recordings[idx]
 
         # # Get corresponding sleep score
         # sleep_score = self.scores_df.loc[
@@ -191,5 +247,6 @@ if __name__ == "__main__":
     config = load_yaml_config(config_file)
     dataset = Donders2022(**config["datasets"]["donders_2022"])
     print(len(dataset))
-    print(dataset.recordings)
-    print(dataset[0])
+    dataset.preprare_recordings()
+    # print(dataset.recordings)
+    # print(dataset[0])
