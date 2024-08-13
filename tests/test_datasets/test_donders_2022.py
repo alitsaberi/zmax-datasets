@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from zmax_real_time.datasets.donders_2022 import Donders2022
+from zmax_datasets.datasets.donders_2022 import Donders2022
 
 
 @pytest.fixture(scope="module")

@@ -4,8 +4,8 @@ import logging.config
 
 from typing_extensions import override
 
-from zmax_real_time import settings
-from zmax_real_time.utils.helpers import load_yaml_config
+from zmax_datasets import settings
+from zmax_datasets.utils.helpers import load_yaml_config
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",

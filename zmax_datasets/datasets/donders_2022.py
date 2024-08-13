@@ -11,17 +11,16 @@ import pandas as pd
 import torch
 from psg_utils.hypnogram.utils import squeeze_events
 from scipy.signal import resample_poly
-from torch.utils.data import Dataset
 
-from zmax_real_time import settings
-from zmax_real_time.datasets.utils import extract_id_by_regex, rescale_and_clip_data
-from zmax_real_time.utils.helpers import load_yaml_config
-from zmax_real_time.utils.logger import setup_logging
+from zmax_datasets import settings
+from zmax_datasets.datasets.utils import extract_id_by_regex, rescale_and_clip_data
+from zmax_datasets.utils.helpers import load_yaml_config
+from zmax_datasets.utils.logger import setup_logging
 
-logger = logging.getLogger("zmax_real_time")
+logger = logging.getLogger(__name__)
 
 
-class Donders2022(Dataset):
+class Donders2022(ZMaxDataset):
     _SUBJECT_DIR_REGEX = re.compile(r"s(?P<id>\d+)")
     _SESSION_DIR_REGEX = re.compile(r"n(?P<id>\d+)")
     _ZMAX_DIR_NAME = "zmax"
