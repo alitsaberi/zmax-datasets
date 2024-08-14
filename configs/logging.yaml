@@ -5,7 +5,7 @@ formatters:
     format: '%(levelname)s: %(message)s'
     datefmt: '%Y-%m-%dT%H:%M:%S%z'
   json:
-    (): zmax_real_time.utils.logger.JSONFormatter
+    (): zmax_datasets.utils.logger.JSONFormatter
     fmt_keys:
       level: levelname
       message: message
@@ -24,7 +24,7 @@ handlers:
     class: logging.handlers.RotatingFileHandler
     level: DEBUG
     formatter: json
-    filename: logs/zmax_real_time.log.jsonl
+    filename: logs/zmax_datasets.log.jsonl
     maxBytes: 50000000 
     backupCount: 3
 loggers:

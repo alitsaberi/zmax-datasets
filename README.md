@@ -1,18 +1,19 @@
 # ZMax Real-Time Analysis
 ## Installation
 ### Requirements
-- Python >= 3.9
+- Python >= 3.10
 ### Development
-1. Create a virtual environment
+1. Create a virtual environment and activate it
 ```
-python3 -m venv $VENV_PATH
+python -m venv $VENV_PATH
+source $VENV_PATH/bin/activate
 ```
 2. Install [Poetry](https://python-poetry.org/docs/#installing-manually)
 ```
-$VENV_PATH/bin/pip install -U pip setuptools
-$VENV_PATH/bin/pip install poetry
+pip install -U pip setuptools
+pip install poetry
 ```
 3. Install dependencies
 ```
-poetry install --with test,dev
+poetry install
 ```

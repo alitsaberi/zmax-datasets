@@ -1,11 +1,21 @@
 import re
 
 import numpy as np
+from scipy.signal import resample_poly
 
 
 def extract_id_by_regex(name: str, regex: re.Pattern) -> int | None:
     match = regex.search(name)
     return int(match.group("id")) if match else None
+
+
+def resample(
+    data: np.ndarray,
+    sampling_frequency: int,
+    old_sampling_frequency: int,
+    axis: int = 0,
+) -> np.ndarray:
+    return resample_poly(data, sampling_frequency, old_sampling_frequency, axis=axis)
 
 
 def rescale_and_clip_data(data: np.ndarray) -> np.ndarray:
