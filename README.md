@@ -17,3 +17,7 @@ pip install poetry
 ```
 poetry install
 ```
+4. Install pre-commit hooks
+```
+pre-commit install
+```
