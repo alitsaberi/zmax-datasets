@@ -1,7 +1,9 @@
+import numpy as np
 import pandas as pd
 import pytest
 
 from zmax_datasets.datasets.donders_2022 import Donders2022
+from zmax_datasets.datasets.exceptions import SleepScoringReadError
 
 
 @pytest.fixture(scope="module")
@@ -18,57 +20,55 @@ def mock_data_dir(tmp_path_factory):
                 / Donders2022._ZMAX_DIR_NAME
             )
             recording_dir.mkdir(parents=True)
-            (recording_dir / f"s{subject_id} n{session_id}_psg.txt").touch()
+            (
+                recording_dir
+                / Donders2022._MANUAL_SLEEP_SCORES_FILE_NAME_PATTERN.format(
+                    subject_id=subject_id, session_id=session_id
+                )
+            ).touch()
 
     return data_dir
 
 
-def test_dataset_initialization(mock_data_dir):
-    dataset = Donders2022(mock_data_dir)
-    assert len(dataset) == 9
-    assert isinstance(dataset.recordings, pd.DataFrame)
-    assert len(dataset.recordings) == 9
-    assert set(dataset.recordings.columns) == {
-        "subject_id",
-        "session_id",
-        "manual_sleep_scores_file",
-    }
+@pytest.fixture
+def mock_donders_dataset(mock_data_dir):
+    return Donders2022(mock_data_dir)
 
 
-def test_dataset_with_selected_subjects(mock_data_dir):
-    dataset = Donders2022(mock_data_dir, selected_subjects=[1, 2])
-    assert len(dataset) == 6
+def test_read_hypnogram(tmp_path):
+    hypnogram_file = tmp_path / "mock_hypnogram.txt"
+    sleep_stages = np.array([0, 1, 2, 3, 4])
+    mock_data = pd.DataFrame({"sleep_stage": sleep_stages, "arousal": [0, 1, 0, 1, 0]})
+    mock_data.to_csv(hypnogram_file, sep=" ", index=False, header=False)
+    result = Donders2022._read_hypnogram(hypnogram_file)
 
+    assert isinstance(result, np.ndarray)
+    assert result.shape == (5,)
+    assert result.dtype == np.int64
+    np.testing.assert_array_equal(result, sleep_stages)
 
-def test_dataset_with_excluded_subjects(mock_data_dir):
-    dataset = Donders2022(mock_data_dir, excluded_subjects=[3])
-    assert len(dataset) == 6
+    # Test with an empty file
+    empty_file = tmp_path / "empty_hypnogram.txt"
+    empty_file.touch()
+    empty_result = Donders2022._read_hypnogram(empty_file)
+    assert len(empty_result) == 0
 
-
-def test_dataset_with_selected_sessions(mock_data_dir):
-    dataset = Donders2022(mock_data_dir, selected_sessions=[1])
-    assert len(dataset) == 3
-
-
-def test_dataset_with_excluded_sessions(mock_data_dir):
-    dataset = Donders2022(mock_data_dir, excluded_sessions=[2])
-    assert len(dataset) == 6
-
-
-def test_dataset_with_excluded_sessions_for_subjects(mock_data_dir):
-    dataset = Donders2022(mock_data_dir, excluded_sessions_for_subjects={1: [1], 2: []})
-    assert len(dataset) == 8
-
-
-def test_extract_ids_from_filename():
-    subject_id, session_id = Donders2022._extract_ids_from_file_name("s3 n8_psg.txt")
-    assert subject_id == 3
-    assert session_id == 8
-
-
-def test_extract_ids_from_invalid_filename():
-    subject_id, session_id = Donders2022._extract_ids_from_file_name(
-        "invalid_filename.txt"
+    # Test with a file containing non-integer values (should raise an error)
+    invalid_file = tmp_path / "invalid_hypnogram.txt"
+    pd.DataFrame({"sleep_stage": [0, 1, "a", 3, 4], "arousal": [0, 1, 0, 1, 0]}).to_csv(
+        invalid_file, sep=" ", index=False, header=False
     )
-    assert subject_id is None
-    assert session_id is None
+    with pytest.raises(SleepScoringReadError):
+        Donders2022._read_hypnogram(invalid_file)
+
+    # Test with a file containing tab-separated columns
+    tab_separated_file = tmp_path / "tab_separated_hypnogram.txt"
+    tab_separated_stages = np.array([0, 1, 2, 3, 4, 5])
+    pd.DataFrame(
+        {"sleep_stage": tab_separated_stages, "arousal": [0, 1, 0, 1, 0, 1]}
+    ).to_csv(tab_separated_file, sep="\t", index=False, header=False)
+    tab_separated_result = Donders2022._read_hypnogram(tab_separated_file)
+    assert isinstance(tab_separated_result, np.ndarray)
+    assert tab_separated_result.shape == (6,)
+    assert tab_separated_result.dtype == np.int64
+    np.testing.assert_array_equal(tab_separated_result, tab_separated_stages)

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from psg_utils.hypnogram.utils import squeeze_events
 
 from zmax_datasets import settings
+from zmax_datasets.datasets.exceptions import SleepScoringReadError
 from zmax_datasets.datasets.utils import (
     extract_id_by_regex,
 )
@@ -24,6 +24,7 @@ class Donders2022(ZMaxDataset):
     _MANUAL_SLEEP_SCORES_FILE_NAME_PATTERN: str = (
         "s{subject_id:d} n{session_id:d}_psg.txt"
     )
+    _MANUAL_SLEEP_SCORES_FILE_SEPARATORS: list[str] = [" ", "\t"]
 
     def _collect_recordings(self) -> list[ZMaxRecording]:
         return [
@@ -80,63 +81,31 @@ class Donders2022(ZMaxDataset):
         )
         return sleep_scores_file if sleep_scores_file.is_file() else None
 
-    def _extract_hypnogram(self, recording: dict):
-        annotations = pd.read_csv(
-            recording["zmax_dir"]
-            / self._MANUAL_SLEEP_SCORES_FILE_NAME_PATTERN.format(
-                subject_id=recording["subject_id"],
-                session_id=recording["session_id"],
-            ),
-            delimiter="\t",
-            names=["sleep_stage", "arousal"],
-            usecols=self.annotations,
-        )
+    @classmethod
+    def _read_hypnogram(cls, hypnogram_file: Path) -> np.ndarray:
+        return cls._read_manual_sleep_scores(hypnogram_file)[
+            "sleep_stage"
+        ].values.squeeze()
 
-        map_ = np.vectorize(
-            {0: "W", 1: "N1", 2: "N2", 3: "N3", 4: "REM", -1: "UNKNOWN"}.get
-        )
+    @classmethod
+    def _read_manual_sleep_scores(cls, sleep_scores_file: Path) -> pd.DataFrame:
+        for separator in cls._MANUAL_SLEEP_SCORES_FILE_SEPARATORS:
+            try:
+                return pd.read_csv(
+                    sleep_scores_file,
+                    sep=separator,
+                    names=["sleep_stage", "arousal"],
+                    dtype=int,
+                )
+            except ValueError:
+                logger.debug(
+                    f"Failed to read sleep scores file {sleep_scores_file}"
+                    f" with separator {separator}. Trying next separator"
+                )
 
-        stages = map_(annotations["sleep_stage"].values)
-        stages = stages.squeeze()
-
-        inits, durs, stages = self.ndarray_to_ids_format(
-            stages=stages,
-            period_length=30,
-        )
-        inits, durs, stages = squeeze_events(inits, durs, stages)
-
-        out_dir = Path(
-            settings.BASE_DIR
-            / "data"
-            / "donders_2022"
-            / f"s{recording['subject_id']}-n{recording['session_id']}"
-        )
-        out = out_dir / f"s{recording['subject_id']}-n{recording['session_id']}.ids"
-        with open(out, "w") as out_f:
-            for i, d, s in zip(inits, durs, stages, strict=False):
-                out_f.write(f"{int(i)},{int(d)},{s}\n")
-        return zmax_dir / self._MANUAL_SLEEP_SCORES_FILE_NAME_PATTERN
-
-    def ndarray_to_ids_format(self, stages, period_length):
-        start_times = []
-        durations = []
-
-        start_time = 0
-        # Process each sleep stage
-        for _ in stages:
-            # Create a row with start time, duration, and sleep stage
-            start_times.append(start_time)
-
-            # Append the duration to the durations array (all durations are 30 seconds)
-            durations.append(period_length)
-
-            # Increment start_time by the epoch duration
-            start_time += period_length
-
-        return (
-            np.asarray(start_times, float),
-            np.asarray(durations, float),
-            stages,
+        raise SleepScoringReadError(
+            f"Failed to read hypnogram file {sleep_scores_file} with default separators"
+            f" {cls._MANUAL_SLEEP_SCORES_FILE_SEPARATORS}"
         )
 
 
@@ -153,7 +122,7 @@ if __name__ == "__main__":
             "EEG L": "F7-Fpz",
             "EEG R": "F8-Fpz",
         },
-        existing_file_handling=HandlingStrategy.OVERWRITE,
+        existing_file_handling=HandlingStrategy.SKIP,
         missing_data_type_handling=HandlingStrategy.SKIP,
     )
     # dataset.preprare_recordings()

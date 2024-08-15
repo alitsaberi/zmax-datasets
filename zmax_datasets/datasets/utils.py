@@ -3,6 +3,8 @@ import re
 import numpy as np
 from scipy.signal import resample_poly
 
+from zmax_datasets import settings
+
 
 def extract_id_by_regex(name: str, regex: re.Pattern) -> int | None:
     match = regex.search(name)
@@ -18,17 +20,29 @@ def resample(
     return resample_poly(data, sampling_frequency, old_sampling_frequency, axis=axis)
 
 
-def rescale_and_clip_data(data: np.ndarray) -> np.ndarray:
-    median = np.median(data, axis=-1, keepdims=True)
-    q1 = np.percentile(data, 25, axis=-1, keepdims=True)
-    q3 = np.percentile(data, 75, axis=-1, keepdims=True)
-    iqr = q3 - q1
+map_hypnogram = np.vectorize(settings.USLEEP["hypnogram_mapping"].get)
 
-    # Clip values with absolute deviation from median more than 20 * IQR
-    threshold = 20 * iqr
-    data_clipped = np.clip(data, median - threshold, median + threshold)
 
-    # To avoid division by zero in case IQR is zero, add a small epsilon
-    iqr[iqr == 0] = 1e-6
+def ndarray_to_ids_format(
+    stages: np.ndarray, period_length: int = settings.DEFAULTS["period_length"]
+):  # TODO: This a uleep util function and should be moved to a usleep-specific place
+    num_stages = len(stages)
+    initials = np.arange(0, num_stages * period_length, period_length)
+    durations = np.full(num_stages, period_length)
 
-    return (data_clipped - median) / iqr
+    return initials, durations, stages
+
+
+def squeeze_ids(
+    initials: np.ndarray, durations: np.ndarray, annotations: np.ndarray
+) -> tuple[
+    np.ndarray, np.ndarray, np.ndarray
+]:  # TODO: This a uleep util function and should be moved to a usleep-specific place
+    changes = np.concatenate(([True], (annotations[1:] != annotations[:-1])))
+    squeezed_initials = initials[changes]
+    squeezed_annotations = annotations[changes]
+    squeezed_durations = np.diff(
+        np.concatenate((squeezed_initials, [initials[-1] + durations[-1]]))
+    )
+
+    return squeezed_initials, squeezed_durations, squeezed_annotations
