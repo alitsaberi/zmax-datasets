@@ -18,7 +18,6 @@ DEFAULTS = {
 
 USLEEP = {
     "sampling_frequency": 128,
-    "hypnogram_mapping": {0: "W", 1: "N1", 2: "N2", 3: "N3", 4: "REM", -1: "UNKNOWN"},
     "default_hypnogram_label": "UNKNOWN",
     "data_types_file_extension": "h5",
     "hypnogram_file_extension": "ids",

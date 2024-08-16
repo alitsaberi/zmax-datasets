@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -7,6 +8,7 @@ from pathlib import Path
 import h5py
 import mne
 import numpy as np
+import pandas as pd
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.exceptions import (
@@ -14,7 +16,7 @@ from zmax_datasets.datasets.exceptions import (
     SleepScoringReadError,
 )
 from zmax_datasets.datasets.utils import (
-    map_hypnogram,
+    mapper,
     ndarray_to_ids_format,
     resample,
     squeeze_ids,
@@ -54,8 +56,8 @@ class HandlingStrategy(Enum):
 
 @dataclass
 class ZMaxRecording:
-    subject_id: int
-    session_id: int
+    subject_id: str
+    session_id: str
     data_dir: Path
     sleep_scores_file: Path | None = None
 
@@ -68,43 +70,48 @@ class ZMaxRecording:
 
 
 class ZMaxDataset(ABC):
+    _MANUAL_SLEEP_SCORES_FILE_SEPARATORS: list[str] = [" ", "\t"]
+
     def __init__(
         self,
         data_dir: Path | str,
-        selected_subjects: list[int] | None = None,
-        selected_sessions: list[int] | None = None,
-        excluded_subjects: list[int] | None = None,
-        excluded_sessions: list[int] | None = None,
-        excluded_sessions_for_subjects: dict[int, list[int]] | None = None,
     ):
         self.data_dir = Path(data_dir)
-        self.selected_subjects = selected_subjects
-        self.selected_sessions = selected_sessions
-        self.excluded_subjects = excluded_subjects
-        self.excluded_sessions = excluded_sessions
-        self.excluded_sessions_for_subjects = excluded_sessions_for_subjects
-        self._recordings = (
-            self._collect_recordings()
-        )  # TODO: Make this a cached property and return as a generator
-
-    def __len__(self) -> int:
-        return len(self._recordings)
 
     @abstractmethod
-    def _collect_recordings(self) -> list[ZMaxRecording]: ...
+    def get_recordings(self) -> Generator[ZMaxRecording, None, None]: ...
 
-    def _is_recording_included(self, subject_id: int, session_id: int) -> bool:
-        return (
-            (not self.selected_subjects or subject_id in self.selected_subjects)
-            and (not self.excluded_subjects or subject_id not in self.excluded_subjects)
-            and (not self.selected_sessions or session_id in self.selected_sessions)
-            and (not self.excluded_sessions or session_id not in self.excluded_sessions)
-            and (
-                not self.excluded_sessions_for_subjects
-                or subject_id not in self.excluded_sessions_for_subjects
-                or session_id not in self.excluded_sessions_for_subjects[subject_id]
+    def _process_zmax_dir(self, zmax_dir: Path) -> ZMaxRecording | None:
+        subject_id, session_id = self._extract_ids_from_zmax_dir(
+            zmax_dir
+        )  # TODO: Raise error rather than removing None
+
+        if subject_id is None or session_id is None:
+            logger.debug(
+                "Skipping recording with because"
+                f"Could not extract subject and session IDs from {zmax_dir}"
             )
+            return
+
+        return ZMaxRecording(
+            subject_id=subject_id,
+            session_id=session_id,
+            data_dir=zmax_dir,
+            sleep_scores_file=self._get_sleep_scores_file(
+                zmax_dir, subject_id, session_id
+            ),
         )
+
+    @classmethod
+    @abstractmethod
+    def _extract_ids_from_zmax_dir(
+        cls, zmax_dir: Path
+    ) -> tuple[int | None, int | None]: ...
+
+    @abstractmethod
+    def _get_sleep_scores_file(
+        self, zmax_dir: Path, subject_id: int, session_id: int
+    ) -> Path | None: ...
 
     def to_usleep(
         self,
@@ -122,11 +129,10 @@ class ZMaxDataset(ABC):
         ):
             logger.warning(f"Invalid keys in data_type_labels: {invalid_data_types}")
 
-        total_recordings = len(self)
         prepared_recordings = 0
-        logger.info(f"Preparing {total_recordings} recordings for USleep")
-        for i, recording in enumerate(self._recordings):
-            logger.info(f"-> Recording {i+1}/{total_recordings}: {recording}")
+        logger.info("Preparing recordings for USleep")
+        for i, recording in enumerate(self.get_recordings()):
+            logger.info(f"-> Recording {i+1}: {recording}")
 
             if recording.sleep_scores_file is None:
                 logger.warning(
@@ -244,7 +250,9 @@ class ZMaxDataset(ABC):
         stages = cls._read_hypnogram(recording.sleep_scores_file)
         logger.debug(f"Stages shape: {stages.shape}")
 
-        stages = map_hypnogram(stages, settings.USLEEP["default_hypnogram_label"])
+        stages = mapper(cls._USLEEP_HYPNOGRAM_MAPPING)(
+            stages, settings.USLEEP["default_hypnogram_label"]
+        )
 
         initials, durations, stages = ndarray_to_ids_format(
             stages,
@@ -257,5 +265,28 @@ class ZMaxDataset(ABC):
                 out_file.write(f"{int(i)},{int(d)},{s}\n")
 
     @classmethod
-    @abstractmethod
-    def _read_hypnogram(self, hypnogram_file: Path) -> np.ndarray: ...
+    def _read_hypnogram(cls, hypnogram_file: Path) -> np.ndarray:
+        return cls._read_manual_sleep_scores(hypnogram_file)[
+            "sleep_stage"
+        ].values.squeeze()
+
+    @classmethod
+    def _read_manual_sleep_scores(cls, sleep_scores_file: Path) -> pd.DataFrame:
+        for separator in cls._MANUAL_SLEEP_SCORES_FILE_SEPARATORS:
+            try:
+                return pd.read_csv(
+                    sleep_scores_file,
+                    sep=separator,
+                    names=["sleep_stage", "arousal"],
+                    dtype=int,
+                )
+            except ValueError:
+                logger.debug(
+                    f"Failed to read sleep scores file {sleep_scores_file}"
+                    f" with separator {separator}. Trying next separator"
+                )
+
+        raise SleepScoringReadError(
+            f"Failed to read hypnogram file {sleep_scores_file} with default separators"
+            f" {cls._MANUAL_SLEEP_SCORES_FILE_SEPARATORS}"
+        )

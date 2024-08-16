@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 
 import numpy as np
 from scipy.signal import resample_poly
@@ -20,7 +21,8 @@ def resample(
     return resample_poly(data, sampling_frequency, old_sampling_frequency, axis=axis)
 
 
-map_hypnogram = np.vectorize(settings.USLEEP["hypnogram_mapping"].get)
+def mapper(mapping: dict[int, str]) -> Callable[[np.ndarray, int], np.ndarray]:
+    return np.vectorize(mapping.get)
 
 
 def ndarray_to_ids_format(

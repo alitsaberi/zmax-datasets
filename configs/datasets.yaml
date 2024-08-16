@@ -1,0 +1,5 @@
+datasets:
+  donders_2022:
+    data_dir: /project/3013097.06/Data
+  qs:
+    data_dir: /project/3022033.01
