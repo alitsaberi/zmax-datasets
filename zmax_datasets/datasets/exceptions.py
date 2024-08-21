@@ -6,4 +6,10 @@ class MissingDataTypesError(ValueError):
 
 
 class SleepScoringReadError(Exception):
-    pass
+    ...
+
+class SleepScoringFileNotFoundError(Exception):
+    ...
+    
+class MultipleSleepScoringFilesFoundError(Exception):
+    ...

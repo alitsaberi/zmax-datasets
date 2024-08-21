@@ -1,9 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Generator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import NoReturn
 
 import h5py
 import mne
@@ -13,6 +14,8 @@ import pandas as pd
 from zmax_datasets import settings
 from zmax_datasets.datasets.exceptions import (
     MissingDataTypesError,
+    MultipleSleepScoringFilesFoundError,
+    SleepScoringFileNotFoundError,
     SleepScoringReadError,
 )
 from zmax_datasets.datasets.utils import (
@@ -24,7 +27,7 @@ from zmax_datasets.datasets.utils import (
 
 logger = logging.getLogger(__name__)
 
-_DATA_TYPE_FILE_FORMAT: str = "edf"
+_DATA_TYPE_FILE_EXTENSION: str = "edf"
 _EEG_CHANNELS: list[str] = ["EEG L", "EEG R"]
 _DATA_TYPES: list[str] = _EEG_CHANNELS + [
     "dX",
@@ -46,12 +49,18 @@ _DATA_TYPES: list[str] = _EEG_CHANNELS + [
     "ROOM C",
     "RSSI",
 ]
+_SLEEP_SCORING_FILE_SEPARATORS: list[str] = [" ", "\t"]
 
 
-class HandlingStrategy(Enum):
+class ExistingFileHandlingStrategy(Enum):
     RAISE_ERROR = "raise_error"
     SKIP = "skip"
     OVERWRITE = "overwrite"
+
+
+class MissingDataTypeHandlingStrategy(Enum):
+    RAISE_ERROR = "raise_error"
+    SKIP = "skip"
 
 
 @dataclass
@@ -59,18 +68,27 @@ class ZMaxRecording:
     subject_id: str
     session_id: str
     data_dir: Path
-    sleep_scores_file: Path | None = None
+    _sleep_scoring_file: Path | None = field(default=None, repr=False, init=False)
+    
+    @property
+    def sleep_scoring_file(self) -> Path | None:
+        return self._sleep_scoring_file
+
+    @sleep_scoring_file.setter
+    def sleep_scoring_file(self, value: Path | None) -> None:
+        if value is not None and not value.is_file():
+            raise FileNotFoundError(f"Sleep scoring file {value} does not exist.")
+        self._sleep_scoring_file = value
 
     @property
     def data_types(self) -> list[str]:
-        return [file.stem for file in self.data_dir.glob(f"*.{_DATA_TYPE_FILE_FORMAT}")]
+        return [data_type for data_type_file in self.data_dir.glob(f"*.{_DATA_TYPE_FILE_EXTENSION}") if (data_type := data_type_file.stem) in _DATA_TYPES]
 
     def __str__(self) -> str:
         return f"s{self.subject_id}_n{self.session_id}"
 
 
 class ZMaxDataset(ABC):
-    _MANUAL_SLEEP_SCORES_FILE_SEPARATORS: list[str] = [" ", "\t"]
 
     def __init__(
         self,
@@ -78,40 +96,52 @@ class ZMaxDataset(ABC):
     ):
         self.data_dir = Path(data_dir)
 
+    def get_recordings(self, with_sleep_scoring: bool = True) -> Generator[ZMaxRecording, None, None]:
+        for zmax_dir in self._zmax_dir_generator():
+            subject_id, session_id = self._extract_ids_from_zmax_dir(zmax_dir)   
+            recording = self._create_recording(subject_id, session_id, zmax_dir)
+            
+            if with_sleep_scoring and not recording.sleep_scoring_file:
+                continue
+            
+            yield recording
+            
+                
     @abstractmethod
-    def get_recordings(self) -> Generator[ZMaxRecording, None, None]: ...
-
-    def _process_zmax_dir(self, zmax_dir: Path) -> ZMaxRecording | None:
-        subject_id, session_id = self._extract_ids_from_zmax_dir(
-            zmax_dir
-        )  # TODO: Raise error rather than removing None
-
-        if subject_id is None or session_id is None:
-            logger.debug(
-                "Skipping recording with because"
-                f"Could not extract subject and session IDs from {zmax_dir}"
-            )
-            return
-
-        return ZMaxRecording(
-            subject_id=subject_id,
-            session_id=session_id,
-            data_dir=zmax_dir,
-            sleep_scores_file=self._get_sleep_scores_file(
-                zmax_dir, subject_id, session_id
-            ),
-        )
+    def _zmax_dir_generator(self) -> Generator[Path, None, None]:
+        ...
 
     @classmethod
     @abstractmethod
     def _extract_ids_from_zmax_dir(
         cls, zmax_dir: Path
-    ) -> tuple[int | None, int | None]: ...
+    ) -> tuple[str, str]:
+        """
+        Extract subject and session IDs from ZMax directory.
+
+        Args:
+            zmax_dir (Path): The path to the ZMax directory.
+
+        Returns:
+            tuple[str, str]:
+                subject_id (str): The subject ID.
+                session_id (str): The session ID.
+        """
+        ...
+        
+    def _create_recording(self, subject_id: str, session_id: str, zmax_dir: Path) -> ZMaxRecording:
+        recording = ZMaxRecording(subject_id, session_id, zmax_dir)
+        try:
+            recording.sleep_scoring_file = self._get_sleep_scoring_file(recording)
+        except (FileNotFoundError, SleepScoringFileNotFoundError, MultipleSleepScoringFilesFoundError) as err:
+            logger.warning(f"Could not set the sleep scoring file for {recording}: {err}")
+        return recording
 
     @abstractmethod
-    def _get_sleep_scores_file(
-        self, zmax_dir: Path, subject_id: int, session_id: int
-    ) -> Path | None: ...
+    def _get_sleep_scoring_file(
+        self, recording: ZMaxRecording
+    ) -> Path:
+        ...
 
     def to_usleep(
         self,
@@ -119,8 +149,8 @@ class ZMaxDataset(ABC):
         data_types: list[str],
         data_type_labels: dict[str, str] | None = None,
         sampling_frequency: int = settings.USLEEP["sampling_frequency"],
-        existing_file_handling: HandlingStrategy = HandlingStrategy.RAISE_ERROR,
-        missing_data_type_handling: HandlingStrategy = HandlingStrategy.RAISE_ERROR,
+        existing_file_handling: ExistingFileHandlingStrategy = ExistingFileHandlingStrategy.RAISE_ERROR,
+        missing_data_type_handling: MissingDataTypeHandlingStrategy = MissingDataTypeHandlingStrategy.RAISE_ERROR,
     ) -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -142,16 +172,21 @@ class ZMaxDataset(ABC):
                 continue
 
             recording_out_dir = out_dir / str(recording)
-            recording_out_dir.mkdir(parents=True, exist_ok=True)
+            recording_out_dir.mkdir(
+                parents=True, exist_ok=True
+            )  # TODO: avoid creating the directory if the recording is skipped
 
             logging.debug(
                 f"Extracting data types: {data_types}."
                 f" Available data types: {recording.data_types}"
             )
             if missing_data_types := set(data_types) - set(recording.data_types):
-                if missing_data_type_handling == HandlingStrategy.RAISE_ERROR:
+                if (
+                    missing_data_type_handling
+                    == MissingDataTypeHandlingStrategy.RAISE_ERROR
+                ):
                     raise MissingDataTypesError(missing_data_types)
-                elif missing_data_type_handling == HandlingStrategy.SKIP:
+                elif missing_data_type_handling == MissingDataTypeHandlingStrategy.SKIP:
                     logger.warning(
                         f"Skipping recording {recording_out_dir.name}"
                         f" due to missing data types: {missing_data_types}"
@@ -188,7 +223,7 @@ class ZMaxDataset(ABC):
         data_types: list[str],
         data_type_labels: dict[str, str] | None = None,
         sampling_frequency: int = settings.USLEEP["sampling_frequency"],
-        existing_file_handling: HandlingStrategy = HandlingStrategy.RAISE_ERROR,
+        existing_file_handling: ExistingFileHandlingStrategy = ExistingFileHandlingStrategy.RAISE_ERROR,
     ) -> None:
         logger.info(f"-> Extracting data types: {data_types}")
 
@@ -198,9 +233,9 @@ class ZMaxDataset(ABC):
         )
 
         if out_file_path.exists():
-            if existing_file_handling == HandlingStrategy.RAISE_ERROR:
+            if existing_file_handling == ExistingFileHandlingStrategy.RAISE_ERROR:
                 raise FileExistsError(f"File {out_file_path} already exists.")
-            elif existing_file_handling == HandlingStrategy.SKIP:
+            elif existing_file_handling == ExistingFileHandlingStrategy.SKIP:
                 logger.info(f"Skipping {out_file_path} because it already exists")
                 return
 
@@ -234,16 +269,16 @@ class ZMaxDataset(ABC):
         cls,
         recording: ZMaxRecording,
         recording_out_dir: Path,
-        existing_file_handling: HandlingStrategy = HandlingStrategy.RAISE_ERROR,
+        existing_file_handling: ExistingFileHandlingStrategy = ExistingFileHandlingStrategy.RAISE_ERROR,
     ) -> None:
         out_file_path = (
             recording_out_dir
             / f"{recording}.{settings.USLEEP['hypnogram_file_extension']}"
         )
         if out_file_path.exists():
-            if existing_file_handling == HandlingStrategy.RAISE_ERROR:
+            if existing_file_handling == ExistingFileHandlingStrategy.RAISE_ERROR:
                 raise FileExistsError(f"File {out_file_path} already exists.")
-            elif existing_file_handling == HandlingStrategy.SKIP:
+            elif existing_file_handling == ExistingFileHandlingStrategy.SKIP:
                 logger.info(f"Skipping {out_file_path} because it already exists")
                 return
 

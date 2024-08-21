@@ -7,11 +7,6 @@ from scipy.signal import resample_poly
 from zmax_datasets import settings
 
 
-def extract_id_by_regex(name: str, regex: re.Pattern) -> int | None:
-    match = regex.search(name)
-    return int(match.group("id")) if match else None
-
-
 def resample(
     data: np.ndarray,
     sampling_frequency: int,
