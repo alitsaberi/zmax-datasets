@@ -5,12 +5,15 @@ from pathlib import Path
 import pandas as pd
 
 from zmax_datasets import settings
-from zmax_datasets.datasets.exceptions import MultipleSleepScoringFilesFoundError, SleepScoringFileNotFoundError
-from zmax_datasets.datasets.zmax import (
+from zmax_datasets.datasets.base import (
     ExistingFileHandlingStrategy,
     MissingDataTypeHandlingStrategy,
     ZMaxDataset,
     ZMaxRecording,
+)
+from zmax_datasets.utils.exceptions import (
+    MultipleSleepScoringFilesFoundError,
+    SleepScoringFileNotFoundError,
 )
 from zmax_datasets.utils.helpers import load_yaml_config
 from zmax_datasets.utils.logger import setup_logging
@@ -21,7 +24,9 @@ logger = logging.getLogger(__name__)
 # TODO: all of these variables should be configurable
 _ZMAX_DIR_PATTERN = "data/PSG/Zmax/original_recordings/*/*/"
 _SCORING_DIR = "Organized QS data/All_in_one_scoring_for_ZMax/"
-_SCORING_MAPPING_FILE = Path(__file__).parent / "qs_scoring_files.csv" # TODO: should find a better way to set this
+_SCORING_MAPPING_FILE = (
+    Path(__file__).parent / "qs_scoring_files.csv"
+)  # TODO: should find a better way to set this
 _SUBJECT_ID = "s1"
 _USLEEP_HYPNOGRAM_MAPPING: dict[int, str] = {
     0: "W",
@@ -34,36 +39,40 @@ _USLEEP_HYPNOGRAM_MAPPING: dict[int, str] = {
 
 
 class QS(ZMaxDataset):
-
     def __init__(self, data_dir: Path | str):
         super().__init__(data_dir)
-        self._scoring_mapping = self._load_scoring_mapping() # TODO: should not be loaded in __init__
-        
+        self._scoring_mapping = (
+            self._load_scoring_mapping()
+        )  # TODO: should not be loaded in __init__
+
     def _load_scoring_mapping(self) -> pd.DataFrame:
         return pd.read_csv(
-            _SCORING_MAPPING_FILE, names=["session_id", "scoring_file"] # TODO: should not be hardcoded
+            _SCORING_MAPPING_FILE,
+            names=["session_id", "scoring_file"],  # TODO: should not be hardcoded
         )
-        
+
     def _zmax_dir_generator(self) -> Generator[Path, None, None]:
         yield from self.data_dir.glob(_ZMAX_DIR_PATTERN)
 
     @classmethod
-    def _extract_ids_from_zmax_dir(
-        cls, zmax_dir: Path
-    ) -> tuple[str, str]:
+    def _extract_ids_from_zmax_dir(cls, zmax_dir: Path) -> tuple[str, str]:
         return _SUBJECT_ID, zmax_dir.name
-        
+
     def _get_sleep_scoring_file(self, recording: ZMaxRecording) -> Path:
         matching_rows = self._scoring_mapping[
             self._scoring_mapping["session_id"] == recording.session_id
         ]
-        
+
         if matching_rows.empty:
-            raise SleepScoringFileNotFoundError(f"No scoring file found for {recording}.")
-        
+            raise SleepScoringFileNotFoundError(
+                f"No scoring file found for {recording}."
+            )
+
         if (scoring_files_count := len(matching_rows)) > 1:
-            raise MultipleSleepScoringFilesFoundError(f"Multiple scoring files ({scoring_files_count}) found for {recording}.")
-            
+            raise MultipleSleepScoringFilesFoundError(
+                f"Multiple scoring files ({scoring_files_count}) found for {recording}."
+            )
+
         return self.data_dir / _SCORING_DIR / matching_rows["scoring_file"].iloc[0]
 
 

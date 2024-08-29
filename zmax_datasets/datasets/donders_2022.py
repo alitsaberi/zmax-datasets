@@ -1,13 +1,9 @@
 import logging
-import re
 from collections.abc import Generator
 from pathlib import Path
 
 from zmax_datasets import settings
-from zmax_datasets.datasets.utils import (
-    extract_id_by_regex,
-)
-from zmax_datasets.datasets.zmax import (
+from zmax_datasets.datasets.base import (
     ExistingFileHandlingStrategy,
     MissingDataTypeHandlingStrategy,
     ZMaxDataset,
@@ -19,10 +15,8 @@ from zmax_datasets.utils.logger import setup_logging
 logger = logging.getLogger(__name__)
 
 # TODO: all of these variables should be configurable
-_ZMAX_DIR_PATTERN = f"s*/n*/zmax/"
-_SLEEP_SCORing_FILE_NAME_PATTERN = (
-    "{subject_id} {session_id}_psg.txt"
-)
+_ZMAX_DIR_PATTERN = "s*/n*/zmax/"
+_SLEEP_SCORing_FILE_NAME_PATTERN = "{subject_id} {session_id}_psg.txt"
 _USLEEP_HYPNOGRAM_MAPPING = {
     0: "W",
     1: "N1",
@@ -34,14 +28,11 @@ _USLEEP_HYPNOGRAM_MAPPING = {
 
 
 class Donders2022(ZMaxDataset):
-    
     def _zmax_dir_generator(self) -> Generator[Path, None, None]:
         yield from self.data_dir.glob(_ZMAX_DIR_PATTERN)
 
     @classmethod
-    def _extract_ids_from_zmax_dir(
-        cls, zmax_dir: Path
-    ) -> tuple[str, str]:
+    def _extract_ids_from_zmax_dir(cls, zmax_dir: Path) -> tuple[str, str]:
         return zmax_dir.parent.parent.name, zmax_dir.parent.name
 
     def _get_sleep_scoring_file(self, recording: ZMaxRecording) -> Path:
@@ -49,7 +40,7 @@ class Donders2022(ZMaxDataset):
             subject_id=recording.subject_id,
             session_id=recording.session_id,
         )
-        
+
 
 if __name__ == "__main__":
     config_file = settings.CONFIG_DIR / "datasets.yaml"

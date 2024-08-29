@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from zmax_datasets.datasets.donders_2022 import Donders2022
-from zmax_datasets.datasets.exceptions import SleepScoringReadError
+from zmax_datasets.utils.exceptions import SleepScoringReadError
 
 
 @pytest.fixture(scope="module")
