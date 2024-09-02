@@ -4,10 +4,14 @@ from collections.abc import Generator
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import mne
+import pandas as pd
+
 from zmax_datasets import settings
 from zmax_datasets.utils.exceptions import (
     MultipleSleepScoringFilesFoundError,
     SleepScoringFileNotFoundError,
+    SleepScoringReadError,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,6 +38,7 @@ _DATA_TYPES: list[str] = _EEG_CHANNELS + [
     "RSSI",
 ]
 _SLEEP_SCORING_FILE_SEPARATORS: list[str] = [" ", "\t"]
+SLEEP_SCORING_FILE_COLUMNS = ["sleep_stage", "arousal"]
 
 
 @dataclass
@@ -66,13 +71,60 @@ class ZMaxRecording:
     def __str__(self) -> str:
         return f"s{self.subject_id}_n{self.session_id}"
 
+    def read_raw_data(self, data_type: str) -> mne.io.Raw:
+        """Extract and return raw data from an EDF file for a specific data type.
+
+        This method reads an EDF file corresponding to the given data type
+        and returns the raw MNE object without further processing.
+
+        Args:
+            data_type (str): The type of data to extract (e.g., 'EEG L', 'EEG R').
+
+        Returns:
+            mne.io.Raw: The raw MNE object containing the extracted data.
+
+        Raises:
+            FileNotFoundError: If the EDF file for the specified data type is not found.
+        """
+        logger.info(f"Extracting {data_type}")
+        data_type_file = (
+            self.data_dir / f"{data_type}.{settings.ZMAX['data_types_file_extension']}"
+        )
+        raw = mne.io.read_raw_edf(data_type_file, preload=False)
+        logger.debug(f"Channels: {raw.info['chs']}")
+        return raw
+
+    def read_sleep_scoring(self) -> pd.DataFrame:
+        for separator in _SLEEP_SCORING_FILE_SEPARATORS:
+            try:
+                return pd.read_csv(
+                    self.sleep_scoring_file,
+                    sep=separator,
+                    names=SLEEP_SCORING_FILE_COLUMNS,
+                    dtype=int,
+                )
+            except ValueError:
+                logger.debug(
+                    f"Failed to read sleep scoring file {self.sleep_scoring_file}"
+                    f" with separator {separator}."
+                )
+
+        raise SleepScoringReadError(
+            f"Failed to read sleep scoring file {self.sleep_scoring_file}"
+            f" with default separators {_SLEEP_SCORING_FILE_SEPARATORS}"
+        )
+
 
 class ZMaxDataset(ABC):
     def __init__(
         self,
         data_dir: Path | str,
+        hypnogram_mapping: dict[int, str] = settings.USLEEP[
+            "default_hypnogram_mapping"
+        ],
     ):
         self.data_dir = Path(data_dir)
+        self.hypnogram_mapping = hypnogram_mapping
 
     def get_recordings(
         self, with_sleep_scoring: bool = False

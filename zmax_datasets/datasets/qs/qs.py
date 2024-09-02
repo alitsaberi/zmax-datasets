@@ -24,9 +24,7 @@ logger = logging.getLogger(__name__)
 # TODO: all of these variables should be configurable
 _ZMAX_DIR_PATTERN = "data/PSG/Zmax/original_recordings/*/*/"
 _SCORING_DIR = "Organized QS data/All_in_one_scoring_for_ZMax/"
-_SCORING_MAPPING_FILE = (
-    Path(__file__).parent / "qs_scoring_files.csv"
-)  # TODO: should find a better way to set this
+_SCORING_MAPPING_FILE = Path(__file__).parent / "qs_scoring_files.csv"
 _SUBJECT_ID = "s1"
 _USLEEP_HYPNOGRAM_MAPPING: dict[int, str] = {
     0: "W",
@@ -39,8 +37,12 @@ _USLEEP_HYPNOGRAM_MAPPING: dict[int, str] = {
 
 
 class QS(ZMaxDataset):
-    def __init__(self, data_dir: Path | str):
-        super().__init__(data_dir)
+    def __init__(
+        self,
+        data_dir: Path | str,
+        hypnogram_mapping: dict[int, str] = _USLEEP_HYPNOGRAM_MAPPING,
+    ):
+        super().__init__(data_dir, hypnogram_mapping)
         self._scoring_mapping = (
             self._load_scoring_mapping()
         )  # TODO: should not be loaded in __init__

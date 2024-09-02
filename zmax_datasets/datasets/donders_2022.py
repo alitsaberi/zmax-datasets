@@ -16,15 +16,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: all of these variables should be configurable
 _ZMAX_DIR_PATTERN = "s*/n*/zmax/"
-_SLEEP_SCORing_FILE_NAME_PATTERN = "{subject_id} {session_id}_psg.txt"
-_USLEEP_HYPNOGRAM_MAPPING = {
-    0: "W",
-    1: "N1",
-    2: "N2",
-    3: "N3",
-    4: "REM",
-    -1: "UNKNOWN",
-}
+_SLEEP_SCORING_FILE_NAME_PATTERN = "{subject_id} {session_id}_psg.txt"
 
 
 class Donders2022(ZMaxDataset):
@@ -36,7 +28,7 @@ class Donders2022(ZMaxDataset):
         return zmax_dir.parent.parent.name, zmax_dir.parent.name
 
     def _get_sleep_scoring_file(self, recording: ZMaxRecording) -> Path:
-        return recording.data_dir / _SLEEP_SCORing_FILE_NAME_PATTERN.format(
+        return recording.data_dir / _SLEEP_SCORING_FILE_NAME_PATTERN.format(
             subject_id=recording.subject_id,
             session_id=recording.session_id,
         )
