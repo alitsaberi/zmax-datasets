@@ -5,3 +5,6 @@ datasets:
     data_dir: /project/3022033.01
   donders_2018:
     data_dir: /project/3013080.01
+  karolinska:
+    data_dir: /project/3013080.01/Zmax_karolinska
+    scoring_dir: /project/3013097.06/AdaptedScorings/Karolinska/All_in_one_scoring_for_ZMax
