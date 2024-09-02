@@ -6,10 +6,13 @@ import pandas as pd
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
-    ExistingFileHandlingStrategy,
-    MissingDataTypeHandlingStrategy,
     ZMaxDataset,
     ZMaxRecording,
+)
+from zmax_datasets.exports.usleep import (
+    ErrorHandling,
+    ExistingFileHandling,
+    USleepExportStrategy,
 )
 from zmax_datasets.utils.exceptions import (
     MultipleSleepScoringFilesFoundError,
@@ -43,9 +46,7 @@ class QS(ZMaxDataset):
         hypnogram_mapping: dict[int, str] = _USLEEP_HYPNOGRAM_MAPPING,
     ):
         super().__init__(data_dir, hypnogram_mapping)
-        self._scoring_mapping = (
-            self._load_scoring_mapping()
-        )  # TODO: should not be loaded in __init__
+        self._scoring_mapping = self._load_scoring_mapping()
 
     def _load_scoring_mapping(self) -> pd.DataFrame:
         return pd.read_csv(
@@ -79,17 +80,17 @@ class QS(ZMaxDataset):
 
 
 if __name__ == "__main__":
-    config_file = settings.CONFIG_DIR / "datasets.yaml"
     setup_logging()
+    config_file = settings.CONFIG_DIR / "datasets.yaml"
     config = load_yaml_config(config_file)
     dataset = QS(**config["datasets"]["qs"])
-    dataset.to_usleep(
-        out_dir=settings.DATA_DIR / "qs",
+    export_strategy = USleepExportStrategy(
         data_types=["EEG R", "EEG L"],
         data_type_labels={
             "EEG L": "F7-Fpz",
             "EEG R": "F8-Fpz",
         },
-        existing_file_handling=ExistingFileHandlingStrategy.OVERWRITE,
-        missing_data_type_handling=MissingDataTypeHandlingStrategy.SKIP,
+        existing_file_handling=ExistingFileHandling.OVERWRITE,
+        error_handling=ErrorHandling.SKIP,
     )
+    export_strategy.export(dataset, Path("data/qs"))

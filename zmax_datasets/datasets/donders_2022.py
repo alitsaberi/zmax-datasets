@@ -4,10 +4,13 @@ from pathlib import Path
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
-    ExistingFileHandlingStrategy,
-    MissingDataTypeHandlingStrategy,
     ZMaxDataset,
     ZMaxRecording,
+)
+from zmax_datasets.exports.usleep import (
+    ErrorHandling,
+    ExistingFileHandling,
+    USleepExportStrategy,
 )
 from zmax_datasets.utils.helpers import load_yaml_config
 from zmax_datasets.utils.logger import setup_logging
@@ -35,20 +38,17 @@ class Donders2022(ZMaxDataset):
 
 
 if __name__ == "__main__":
-    config_file = settings.CONFIG_DIR / "datasets.yaml"
     setup_logging()
+    config_file = settings.CONFIG_DIR / "datasets.yaml"
     config = load_yaml_config(config_file)
     dataset = Donders2022(**config["datasets"]["donders_2022"])
-    dataset.to_usleep(
-        out_dir=settings.DATA_DIR / "donders_2022",
+    export_strategy = USleepExportStrategy(
         data_types=["EEG R", "EEG L"],
         data_type_labels={
             "EEG L": "F7-Fpz",
             "EEG R": "F8-Fpz",
         },
-        existing_file_handling=ExistingFileHandlingStrategy.OVERWRITE,
-        missing_data_type_handling=MissingDataTypeHandlingStrategy.SKIP,
+        existing_file_handling=ExistingFileHandling.OVERWRITE,
+        error_handling=ErrorHandling.SKIP,
     )
-    # dataset.preprare_recordings()
-    # print(dataset.recordings)
-    # print(dataset[0])
+    export_strategy.export(dataset, Path("data/donders_2022"))

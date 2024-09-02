@@ -69,7 +69,7 @@ class ZMaxRecording:
         ]
 
     def __str__(self) -> str:
-        return f"s{self.subject_id}_n{self.session_id}"
+        return f"{self.subject_id}_{self.session_id}"
 
     def read_raw_data(self, data_type: str) -> mne.io.Raw:
         """Extract and return raw data from an EDF file for a specific data type.
@@ -103,10 +103,10 @@ class ZMaxRecording:
                     names=SLEEP_SCORING_FILE_COLUMNS,
                     dtype=int,
                 )
-            except ValueError:
+            except ValueError as e:
                 logger.debug(
                     f"Failed to read sleep scoring file {self.sleep_scoring_file}"
-                    f" with separator {separator}."
+                    f" with separator {separator}: {e}"
                 )
 
         raise SleepScoringReadError(

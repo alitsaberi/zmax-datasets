@@ -11,10 +11,10 @@ from zmax_datasets.datasets.base import (
     ZMaxDataset,
     ZMaxRecording,
 )
-from zmax_datasets.datasets.utils import resample
+from zmax_datasets.datasets.utils import mapper, resample
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.utils.exceptions import MissingDataTypesError, SleepScoringReadError
-from zmax_datasets.utils.helpers import mapper, remove_tree
+from zmax_datasets.utils.helpers import remove_tree
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,6 @@ class USleepExportStrategy(ExportStrategy):
                     recording, recording_out_dir, dataset.hypnogram_mapping
                 )
                 prepared_recordings += 1
-                logger.info(f"Prepared {prepared_recordings} recordings for USleep")
             except (
                 MissingDataTypesError,
                 SleepScoringReadError,
@@ -103,6 +102,8 @@ class USleepExportStrategy(ExportStrategy):
                     logger.warning(f"Skipping recording {recording_out_dir.name}: {e}")
                 elif self.error_handling == ErrorHandling.RAISE:
                     raise e
+
+        logger.info(f"Prepared {prepared_recordings} recordings for USleep")
 
     def _extract_data_types(
         self,
