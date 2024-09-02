@@ -43,9 +43,10 @@ class QS(ZMaxDataset):
     def __init__(
         self,
         data_dir: Path | str,
+        zmax_dir_pattern: str = _ZMAX_DIR_PATTERN,
         hypnogram_mapping: dict[int, str] = _USLEEP_HYPNOGRAM_MAPPING,
     ):
-        super().__init__(data_dir, hypnogram_mapping)
+        super().__init__(data_dir, zmax_dir_pattern, hypnogram_mapping)
         self._scoring_mapping = self._load_scoring_mapping()
 
     def _load_scoring_mapping(self) -> pd.DataFrame:

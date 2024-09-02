@@ -119,12 +119,14 @@ class ZMaxDataset(ABC):
     def __init__(
         self,
         data_dir: Path | str,
+        zmax_dir_pattern: str,
         hypnogram_mapping: dict[int, str] = settings.USLEEP[
             "default_hypnogram_mapping"
         ],
     ):
         self.data_dir = Path(data_dir)
         self.hypnogram_mapping = hypnogram_mapping
+        self._zmax_dir_pattern = zmax_dir_pattern
 
     def get_recordings(
         self, with_sleep_scoring: bool = False
@@ -138,8 +140,8 @@ class ZMaxDataset(ABC):
 
             yield recording
 
-    @abstractmethod
-    def _zmax_dir_generator(self) -> Generator[Path, None, None]: ...
+    def _zmax_dir_generator(self) -> Generator[Path, None, None]:
+        yield from self.data_dir.glob(self._zmax_dir_pattern)
 
     @classmethod
     @abstractmethod
