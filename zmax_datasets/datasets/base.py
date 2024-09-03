@@ -120,13 +120,17 @@ class ZMaxDataset(ABC):
         self,
         data_dir: Path | str,
         zmax_dir_pattern: str,
+        sleep_scoring_dir: Path | str | None = None,
+        sleep_scoring_file_pattern: str | None = None,
         hypnogram_mapping: dict[int, str] = settings.USLEEP[
             "default_hypnogram_mapping"
         ],
     ):
         self.data_dir = Path(data_dir)
-        self.hypnogram_mapping = hypnogram_mapping
         self._zmax_dir_pattern = zmax_dir_pattern
+        self._sleep_scoring_dir = Path(sleep_scoring_dir) if sleep_scoring_dir else None
+        self._sleep_scoring_file_pattern = sleep_scoring_file_pattern
+        self.hypnogram_mapping = hypnogram_mapping
 
     def get_recordings(
         self, with_sleep_scoring: bool = False

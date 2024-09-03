@@ -16,28 +16,14 @@ from zmax_datasets.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
 
-# TODO: all of these variables should be configurable
-_ZMAX_DIR_PATTERN = "s*/n*/zmax/"
-_SLEEP_SCORING_FILE_NAME_PATTERN = "{subject_id} {session_id}_psg.txt"
-
 
 class Donders2022(ZMaxDataset):
-    def __init__(
-        self,
-        data_dir: Path | str,
-        zmax_dir_pattern: str = _ZMAX_DIR_PATTERN,
-        hypnogram_mapping: dict[int, str] = settings.USLEEP[
-            "default_hypnogram_mapping"
-        ],
-    ):
-        super().__init__(data_dir, zmax_dir_pattern, hypnogram_mapping)
-
     @classmethod
     def _extract_ids_from_zmax_dir(cls, zmax_dir: Path) -> tuple[str, str]:
         return zmax_dir.parent.parent.name, zmax_dir.parent.name
 
     def _get_sleep_scoring_file(self, recording: ZMaxRecording) -> Path:
-        return recording.data_dir / _SLEEP_SCORING_FILE_NAME_PATTERN.format(
+        return recording.data_dir / self._sleep_scoring_file_pattern.format(
             subject_id=recording.subject_id,
             session_id=recording.session_id,
         )

@@ -1,5 +1,4 @@
 import logging
-from collections.abc import Generator
 from pathlib import Path
 
 import pandas as pd
@@ -24,9 +23,6 @@ from zmax_datasets.utils.logger import setup_logging
 logger = logging.getLogger(__name__)
 
 
-# TODO: all of these variables should be configurable
-_ZMAX_DIR_PATTERN = "data/PSG/Zmax/original_recordings/*/*/"
-_SCORING_DIR = "Organized QS data/All_in_one_scoring_for_ZMax/"
 _SCORING_MAPPING_FILE = Path(__file__).parent / "qs_scoring_files.csv"
 _SUBJECT_ID = "s1"
 _USLEEP_HYPNOGRAM_MAPPING: dict[int, str] = {
@@ -43,10 +39,18 @@ class QS(ZMaxDataset):
     def __init__(
         self,
         data_dir: Path | str,
-        zmax_dir_pattern: str = _ZMAX_DIR_PATTERN,
+        zmax_dir_pattern: str,
+        sleep_scoring_dir: Path | str | None = None,
+        sleep_scoring_file_pattern: str | None = None,
         hypnogram_mapping: dict[int, str] = _USLEEP_HYPNOGRAM_MAPPING,
     ):
-        super().__init__(data_dir, zmax_dir_pattern, hypnogram_mapping)
+        super().__init__(
+            data_dir,
+            zmax_dir_pattern,
+            sleep_scoring_dir,
+            sleep_scoring_file_pattern,
+            hypnogram_mapping,
+        )
         self._scoring_mapping = self._load_scoring_mapping()
 
     def _load_scoring_mapping(self) -> pd.DataFrame:
@@ -54,9 +58,6 @@ class QS(ZMaxDataset):
             _SCORING_MAPPING_FILE,
             names=["session_id", "scoring_file"],  # TODO: should not be hardcoded
         )
-
-    def _zmax_dir_generator(self) -> Generator[Path, None, None]:
-        yield from self.data_dir.glob(_ZMAX_DIR_PATTERN)
 
     @classmethod
     def _extract_ids_from_zmax_dir(cls, zmax_dir: Path) -> tuple[str, str]:
@@ -77,7 +78,7 @@ class QS(ZMaxDataset):
                 f"Multiple scoring files ({scoring_files_count}) found for {recording}."
             )
 
-        return self.data_dir / _SCORING_DIR / matching_rows["scoring_file"].iloc[0]
+        return self._sleep_scoring_dir / matching_rows["scoring_file"].iloc[0]
 
 
 if __name__ == "__main__":
