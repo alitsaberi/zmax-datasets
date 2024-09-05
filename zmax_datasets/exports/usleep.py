@@ -49,6 +49,9 @@ class USleepExportStrategy(ExportStrategy):
         existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
     ):
+        super().__init__(
+            existing_file_handling=existing_file_handling, error_handling=error_handling
+        )
         self.data_types = data_types
 
         if data_type_labels and (
@@ -57,10 +60,7 @@ class USleepExportStrategy(ExportStrategy):
             logger.warning(f"Invalid keys in data_type_labels: {invalid_data_types}")
 
         self.data_type_labels = data_type_labels
-
         self.sampling_frequency = sampling_frequency
-        self.existing_file_handling = existing_file_handling
-        self.error_handling = error_handling
 
     def _export(self, dataset: ZMaxDataset, out_dir: Path) -> None:
         prepared_recordings = 0
@@ -82,14 +82,7 @@ class USleepExportStrategy(ExportStrategy):
                 FileExistsError,
                 FileNotFoundError,
             ) as e:
-                remove_tree(recording_out_dir)
-
-                if (
-                    self.error_handling == ErrorHandling.SKIP
-                ):  # TODO: make this object-oriented
-                    logger.warning(f"Skipping recording {recording}: {e}")
-                elif self.error_handling == ErrorHandling.RAISE:
-                    raise e
+                self._handle_error(e, recording, recording_out_dir)
 
         logger.info(f"Prepared {prepared_recordings} recordings for USleep")
 
@@ -161,3 +154,12 @@ class USleepExportStrategy(ExportStrategy):
             and self.existing_file_handling == ExistingFileHandling.RAISE_ERROR
         ):
             raise FileExistsError(f"File {file_path} already exists.")
+
+    def _handle_error(
+        self, error: Exception, recording: ZMaxRecording, recording_out_dir: Path
+    ) -> None:
+        remove_tree(recording_out_dir)
+        if self.error_handling == ErrorHandling.SKIP:
+            logger.warning(f"Skipping recording {recording}: {error}")
+        elif self.error_handling == ErrorHandling.RAISE:
+            raise error

@@ -44,12 +44,13 @@ class YasaExportStrategy(ExportStrategy):
         existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
     ):
+        super().__init__(
+            existing_file_handling=existing_file_handling, error_handling=error_handling
+        )
         self._validate_channels(eeg_channel, eog_channel)
         self.eeg_channel = eeg_channel
         self.eog_channel = eog_channel
         self.sampling_frequency = sampling_frequency
-        self.existing_file_handling = existing_file_handling
-        self.error_handling = error_handling
 
     def _validate_channels(self, eeg_channel: str, eog_channel: str | None) -> None:
         if eeg_channel not in EEG_CHANNELS:
@@ -77,7 +78,8 @@ class YasaExportStrategy(ExportStrategy):
         if file_path.exists():
             if self.existing_file_handling == ExistingFileHandling.RAISE_ERROR:
                 raise FileExistsError(f"File {file_path} already exists.")
-            return pd.read_parquet(file_path)
+            elif self.existing_file_handling == ExistingFileHandling.APPEND:
+                return pd.read_parquet(file_path)
         return pd.DataFrame()
 
     def _update_hypnogram_mapping(
