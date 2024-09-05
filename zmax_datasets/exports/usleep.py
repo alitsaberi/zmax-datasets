@@ -25,7 +25,6 @@ def ndarray_to_ids_format(
     num_stages = len(stages)
     initials = np.arange(0, num_stages * period_length, period_length)
     durations = np.full(num_stages, period_length)
-
     return initials, durations, stages
 
 
@@ -38,7 +37,6 @@ def squeeze_ids(
     squeezed_durations = np.diff(
         np.concatenate((squeezed_initials, [initials[-1] + durations[-1]]))
     )
-
     return squeezed_initials, squeezed_durations, squeezed_annotations
 
 
@@ -106,30 +104,33 @@ class USleepExportStrategy(ExportStrategy):
             recording_out_dir
             / f"{recording}.{settings.USLEEP['data_types_file_extension']}"
         )
-
-        if (
-            out_file_path.exists()
-            and self.existing_file_handling == ExistingFileHandling.RAISE_ERROR
-        ):
-            raise FileExistsError(f"File {out_file_path} already exists.")
+        self._check_existing_file(out_file_path)
 
         with h5py.File(out_file_path, "w") as out_file:
             out_file.create_group("channels")
             for index, data_type in enumerate(self.data_types):
-                raw = recording.read_raw_data(data_type)
-                data = resample(
-                    raw.get_data().squeeze(), self.sampling_frequency, raw.info["sfreq"]
-                )
-
-                dataset = out_file["channels"].create_dataset(
-                    self.data_type_labels.get(data_type, data_type),
-                    data=data,
-                    chunks=True,
-                    compression="gzip",
-                )
-                dataset.attrs["channel_index"] = index
-
+                data = self._get_resampled_data(recording, data_type)
+                self._write_data_to_hdf5(out_file, data_type, data, index)
             out_file.attrs["sample_rate"] = self.sampling_frequency
+
+    def _get_resampled_data(
+        self, recording: ZMaxRecording, data_type: str
+    ) -> np.ndarray:
+        raw = recording.read_raw_data(data_type)
+        return resample(
+            raw.get_data().squeeze(), self.sampling_frequency, raw.info["sfreq"]
+        )
+
+    def _write_data_to_hdf5(
+        self, out_file: h5py.File, data_type: str, data: np.ndarray, index: int
+    ) -> None:
+        dataset = out_file["channels"].create_dataset(
+            self.data_type_labels.get(data_type, data_type),
+            data=data,
+            chunks=True,
+            compression="gzip",
+        )
+        dataset.attrs["channel_index"] = index
 
     def _extract_hypnogram(
         self,
@@ -143,11 +144,7 @@ class USleepExportStrategy(ExportStrategy):
             recording_out_dir
             / f"{recording}.{settings.USLEEP['hypnogram_file_extension']}"
         )
-        if (
-            out_file_path.exists()
-            and self.existing_file_handling == ExistingFileHandling.RAISE_ERROR
-        ):
-            raise FileExistsError(f"File {out_file_path} already exists.")
+        self._check_existing_file(out_file_path)
 
         stages = read_hypnogram(recording, hypnogram_mapping=hypnogram_mapping)
 
@@ -157,3 +154,10 @@ class USleepExportStrategy(ExportStrategy):
         with open(out_file_path, "w") as out_file:
             for i, d, s in zip(initials, durations, stages, strict=False):
                 out_file.write(f"{int(i)},{int(d)},{s}\n")
+
+    def _check_existing_file(self, file_path: Path) -> None:
+        if (
+            file_path.exists()
+            and self.existing_file_handling == ExistingFileHandling.RAISE_ERROR
+        ):
+            raise FileExistsError(f"File {file_path} already exists.")
