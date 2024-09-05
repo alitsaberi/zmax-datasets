@@ -11,14 +11,8 @@ DATA_DIR = BASE_DIR / "data"
 
 DEFAULTS = {
     "period_length": 30,  # seconds
-}
-
-############################ USleep #############################
-
-USLEEP = {
-    "sampling_frequency": 128,
-    "default_hypnogram_label": "UNKNOWN",
-    "default_hypnogram_mapping": {
+    "hypnogram_label": "UNKNOWN",
+    "hynogram_mapping": {
         0: "W",
         1: "N1",
         2: "N2",
@@ -26,6 +20,12 @@ USLEEP = {
         4: "REM",
         -1: "UNKNOWN",
     },
+}
+
+############################ USleep #############################
+
+USLEEP = {
+    "sampling_frequency": 128,
     "data_types_file_extension": "h5",
     "hypnogram_file_extension": "ids",
 }
@@ -34,6 +34,20 @@ USLEEP = {
 
 ZMAX = {
     "data_types_file_extension": "edf",
+}
+
+############################# ZMax ##############################
+
+YASA = {
+    "sampling_frequency": 100,
+    "hypnogram_mapping": {
+        "W": "W",
+        "N1": "N1",
+        "N2": "N2",
+        "N3": "N3",
+        "REM": "REM",
+        "UNKNOWN": "Uns",
+    },
 }
 
 #################################################################

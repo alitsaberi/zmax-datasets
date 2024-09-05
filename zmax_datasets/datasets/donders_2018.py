@@ -17,33 +17,7 @@ from zmax_datasets.utils.logger import setup_logging
 logger = logging.getLogger(__name__)
 
 
-_USLEEP_HYPNOGRAM_MAPPING: dict[int, str] = {
-    0: "W",
-    1: "N1",
-    2: "N2",
-    3: "N3",
-    5: "REM",
-    -1: "UNKNOWN",
-}
-
-
 class Donders2018(ZMaxDataset):
-    def __init__(
-        self,
-        data_dir: Path | str,
-        zmax_dir_pattern: str,
-        sleep_scoring_dir: Path | str | None = None,
-        sleep_scoring_file_pattern: str | None = None,
-        hypnogram_mapping: dict[int, str] = _USLEEP_HYPNOGRAM_MAPPING,
-    ):
-        super().__init__(
-            data_dir,
-            zmax_dir_pattern,
-            sleep_scoring_dir,
-            sleep_scoring_file_pattern,
-            hypnogram_mapping,
-        )
-
     @classmethod
     def _extract_ids_from_zmax_dir(cls, zmax_dir: Path) -> tuple[str, str]:
         return zmax_dir.parent.name.replace("_", ""), zmax_dir.name.replace("_", "")

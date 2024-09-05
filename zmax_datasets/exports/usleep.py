@@ -1,5 +1,4 @@
 import logging
-from enum import Enum, auto
 from pathlib import Path
 
 import h5py
@@ -7,26 +6,17 @@ import numpy as np
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
-    SLEEP_SCORING_FILE_COLUMNS,
     ZMaxDataset,
     ZMaxRecording,
+    read_hypnogram,
 )
-from zmax_datasets.datasets.utils import mapper, resample
+from zmax_datasets.datasets.utils import resample
 from zmax_datasets.exports.base import ExportStrategy
+from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
 from zmax_datasets.utils.exceptions import MissingDataTypesError, SleepScoringReadError
 from zmax_datasets.utils.helpers import remove_tree
 
 logger = logging.getLogger(__name__)
-
-
-class ExistingFileHandling(Enum):
-    RAISE_ERROR = auto()
-    OVERWRITE = auto()
-
-
-class ErrorHandling(Enum):
-    RAISE = auto()
-    SKIP = auto()
 
 
 def ndarray_to_ids_format(
@@ -99,7 +89,7 @@ class USleepExportStrategy(ExportStrategy):
                 if (
                     self.error_handling == ErrorHandling.SKIP
                 ):  # TODO: make this object-oriented
-                    logger.warning(f"Skipping recording {recording_out_dir.name}: {e}")
+                    logger.warning(f"Skipping recording {recording}: {e}")
                 elif self.error_handling == ErrorHandling.RAISE:
                     raise e
 
@@ -145,7 +135,7 @@ class USleepExportStrategy(ExportStrategy):
         self,
         recording: ZMaxRecording,
         recording_out_dir: Path,
-        hypnogram_mapping: dict[str, str],
+        hypnogram_mapping: dict[int, str],
     ) -> None:
         logger.info("Extracting hypnogram...")
 
@@ -159,14 +149,7 @@ class USleepExportStrategy(ExportStrategy):
         ):
             raise FileExistsError(f"File {out_file_path} already exists.")
 
-        stages = recording.read_sleep_scoring()[
-            SLEEP_SCORING_FILE_COLUMNS[0]
-        ].values.squeeze()
-        logger.debug(f"Stages shape: {stages.shape}")
-
-        stages = mapper(hypnogram_mapping)(
-            stages, settings.USLEEP["default_hypnogram_label"]
-        )
+        stages = read_hypnogram(recording, hypnogram_mapping=hypnogram_mapping)
 
         initials, durations, stages = ndarray_to_ids_format(stages)
         initials, durations, stages = squeeze_ids(initials, durations, stages)
