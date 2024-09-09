@@ -2,7 +2,7 @@ version: 1
 disable_existing_loggers: false
 formatters:
   simple:
-    format: '%(levelname)s: %(message)s'
+    format: '%(levelname)s | %(message)s'
     datefmt: '%Y-%m-%dT%H:%M:%S%z'
   json:
     (): zmax_datasets.utils.logger.JSONFormatter
