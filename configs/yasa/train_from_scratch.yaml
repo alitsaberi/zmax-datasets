@@ -1,0 +1,20 @@
+data_file: data/yasa/zmax.parquet
+data_types: [eeg, eog]
+early_stopping_rounds: 50
+use_pretrained: false
+classifier_args:
+  boosting_type: gbdt
+  num_leaves: 90
+  max_depth: 5
+  learning_rate: 0.1
+  n_estimators: 400
+  class_weight:
+    N1: 2.2
+    N2: 1
+    N3: 1.2
+    R: 1.4
+    W: 1
+  colsample_bytree: 0.5
+  n_jobs: 8
+  importance_type: gain
+  verbose: -1

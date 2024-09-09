@@ -2,10 +2,17 @@ from pathlib import Path
 
 ############################ Paths #############################
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+PACKAGE_DIR = Path(__file__).resolve().parent
+BASE_DIR = PACKAGE_DIR.parent
 CONFIG_DIR = BASE_DIR / "configs"
 LOGGING_CONFIG_FILE = CONFIG_DIR / "logging.yaml"
 DATA_DIR = BASE_DIR / "data"
+LOGS_DIR = BASE_DIR / "logs"
+
+############################ General ############################
+
+PACKAGE_NAME = PACKAGE_DIR.name
+LOG_FILE_EXTENSION = ".log.jsonl"
 
 ########################### Defaults ############################
 
@@ -45,8 +52,13 @@ YASA = {
         "N1": "N1",
         "N2": "N2",
         "N3": "N3",
-        "REM": "REM",
+        "REM": "R",
         "UNKNOWN": "Uns",
+    },
+    "hypnogram_column": "stage",
+    "split_labels": {
+        "train": "training",
+        "test": "testing",
     },
 }
 

@@ -1,0 +1,4 @@
+data_file: data/yasa/zmax.parquet
+data_types: [eeg, eog]
+early_stopping_rounds: 50
+use_pretrained: true

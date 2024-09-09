@@ -17,6 +17,8 @@ typing-extensions = "^4.12.2"
 yasa = {version = "^0.6.5", optional = true}
 setuptools = {version = "^74.1.2", optional = true}
 pyarrow = {version = "^17.0.0", optional = true}
+ipykernel = {version = "^6.29.5", optional = true}
+tqdm = {version = "^4.66.5", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.7"
@@ -26,8 +28,8 @@ pre-commit = "^3.8.0"
 pytest = "^8.3.2"
 
 [tool.poetry.extras]
-yasa = ["yasa", "setuptools", "pyarrow"]
-jupyter = ["jupyterlab"]
+yasa = ["yasa", "setuptools", "pyarrow", "tqdm"]
+jupyter = ["jupyterlab", "ipykernel"]
 
 [tool.ruff]
 exclude = [

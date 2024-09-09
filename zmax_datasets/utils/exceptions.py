@@ -24,3 +24,12 @@ class NoFeaturesExtractedError(ZMaxDatasetError): ...
 
 
 class ChannelLengthMismatchError(ZMaxDatasetError): ...
+
+
+class HypnogramMismatchError(ZMaxDatasetError):
+    def __init__(self, features_length: int, hypnogram_length: int):
+        self.message = (
+            "Features and hypnogram have different lengths:"
+            f" {features_length} and {hypnogram_length}"
+        )
+        super().__init__(self.message)

@@ -78,6 +78,7 @@ if __name__ == "__main__":
         eeg_channel="EEG L",
         eog_channel="EEG R",
         sampling_frequency=100,
+        test_split_size=0.0,
         existing_file_handling=ExistingFileHandling.APPEND,
         error_handling=ErrorHandling.SKIP,
     )

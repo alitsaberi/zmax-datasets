@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from random import sample
 
 import mne
 import numpy as np
@@ -17,6 +18,7 @@ from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
 from zmax_datasets.utils.exceptions import (
     ChannelLengthMismatchError,
+    HypnogramMismatchError,
     InvalidZMaxDataTypeError,
     MissingDataTypesError,
     NoFeaturesExtractedError,
@@ -27,16 +29,41 @@ logger = logging.getLogger(__name__)
 
 
 _OUT_FILE_NAME = "zmax.parquet"
-_DATA_FRAME_INDICES = ["dataset", "subject_id", "session_id", "epoch"]
+_DATASET_COLUMN = "dataset"
+_SUBJECT_COLUMN = "subj"
+_SESSION_COLUMN = "session"
+_SPLIT_COLUMN = "set"
+_DATA_FRAME_INDICES = [_SPLIT_COLUMN, _DATASET_COLUMN, _SUBJECT_COLUMN, _SESSION_COLUMN]
 
 
-class HypnogramMismatchError(Exception):
-    def __init__(self, features_length: int, hypnogram_length: int):
-        self.message = (
-            "Features and hypnogram have different lengths:"
-            f" {features_length} and {hypnogram_length}"
+def summarize_dataset(df: pd.DataFrame) -> None:
+    summary_data = []
+    splits = list(settings.YASA["split_labels"].keys()) + ["total"]
+
+    for split in splits:
+        split_df = (
+            df
+            if split == "total"
+            else df[
+                df.index.get_level_values(_SPLIT_COLUMN)
+                == settings.YASA["split_labels"][split]
+            ]
         )
-        super().__init__(self.message)
+
+        summary_data.append(
+            {
+                "num_subjects": split_df.index.get_level_values(
+                    _SUBJECT_COLUMN
+                ).nunique(),
+                "num_recordings": split_df.groupby(
+                    [_SUBJECT_COLUMN, _SESSION_COLUMN]
+                ).ngroups,
+                "num_samples": len(split_df),
+            }
+        )
+
+    summary_df = pd.DataFrame(summary_data, index=splits)
+    return summary_df
 
 
 class YasaExportStrategy(ExportStrategy):
@@ -45,6 +72,7 @@ class YasaExportStrategy(ExportStrategy):
         eeg_channel: str,
         eog_channel: str | None = None,
         sampling_frequency: int = settings.YASA["sampling_frequency"],
+        test_split_size: float = 0.2,
         existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
     ):
@@ -55,6 +83,7 @@ class YasaExportStrategy(ExportStrategy):
         self.eeg_channel = eeg_channel
         self.eog_channel = eog_channel
         self.sampling_frequency = sampling_frequency
+        self.test_split_size = test_split_size
 
     def _validate_channels(self, eeg_channel: str, eog_channel: str | None) -> None:
         if eeg_channel not in EEG_CHANNELS:
@@ -75,15 +104,17 @@ class YasaExportStrategy(ExportStrategy):
                 dataset.hypnogram_mapping
             )
             dataset_features = self._process_recordings(dataset, hypnogram_mapping)
-            df = self._update_dataframe(
-                df, dataset_features, dataset.__class__.__name__
+            dataset_df = self._create_dataset(
+                dataset_features, dataset.__class__.__name__
             )
+            logger.info(summarize_dataset(dataset_df))
+            df = dataset_df.combine_first(df)
+            df.sort_index(inplace=True)
             df.to_parquet(out_file_path)
         except NoFeaturesExtractedError as e:
             self._handle_error(e)
 
-        logger.info(f"Prepared {len(dataset_features)} recordings for Yasa.")
-        logger.info(f"Created {out_file_path} with {df}.")
+        logger.info(f"Created {out_file_path}.")
 
     def _load_existing_data(self, file_path: Path) -> pd.DataFrame:
         if file_path.exists():
@@ -95,7 +126,7 @@ class YasaExportStrategy(ExportStrategy):
                 df = pd.read_parquet(file_path)
                 logger.info(
                     f"Loaded existing data from {file_path}."
-                    f" Datasets: {df.index.unique(level=0).to_list()}"
+                    f" Datasets: {df.index.unique(level=1).to_list()}"
                 )
                 return df
         return pd.DataFrame()
@@ -128,7 +159,7 @@ class YasaExportStrategy(ExportStrategy):
                 if len(features) != len(hypnogram):
                     raise HypnogramMismatchError(len(features), len(hypnogram))
 
-                features["stage"] = hypnogram
+                features[settings.YASA["hypnogram_column"]] = hypnogram
                 dataset_features.append(features)
             except (
                 MissingDataTypesError,
@@ -138,6 +169,7 @@ class YasaExportStrategy(ExportStrategy):
                 ChannelLengthMismatchError,
             ) as e:
                 self._handle_error(e, f"Skipping recording {recording}")
+
         return dataset_features
 
     def _extract_features(
@@ -153,8 +185,8 @@ class YasaExportStrategy(ExportStrategy):
         )
 
         features = yasa_feature_extractor.get_features().reset_index()
-        features["subject_id"] = recording.subject_id
-        features["session_id"] = recording.session_id
+        features[_SUBJECT_COLUMN] = recording.subject_id
+        features[_SESSION_COLUMN] = recording.session_id
 
         return features
 
@@ -198,18 +230,33 @@ class YasaExportStrategy(ExportStrategy):
         elif self.error_handling == ErrorHandling.RAISE:
             raise error
 
-    def _update_dataframe(
-        self, df: pd.DataFrame, dataset_features: list, dataset_name: str
+    def _create_dataset(
+        self, dataset_features: list[pd.DataFrame], dataset_name: str
     ) -> pd.DataFrame:
         if not dataset_features:
             raise NoFeaturesExtractedError(
                 f"No features extracted for dataset {dataset_name}"
             )
 
-        df_ = pd.concat(dataset_features)
-        df_["dataset"] = dataset_name
-        df_["dataset"] = df_["dataset"].astype("category")
-        df_["stage"] = df_["stage"].astype("category")
-        df_.set_index(_DATA_FRAME_INDICES, inplace=True)
-        logger.debug(f"Dataset features: {df_}")
-        return df_.combine_first(df)
+        df = pd.concat(dataset_features)
+        df[_DATASET_COLUMN] = dataset_name
+        df[_DATASET_COLUMN] = df[_DATASET_COLUMN].astype("category")
+        df[settings.YASA["hypnogram_column"]] = df[
+            settings.YASA["hypnogram_column"]
+        ].astype("category")
+        df = self._split_dataset(df)
+        df.set_index(_DATA_FRAME_INDICES, inplace=True)
+        return df
+
+    def _split_dataset(self, df: pd.DataFrame) -> pd.DataFrame:
+        subject_ids = df[_SUBJECT_COLUMN].unique()
+        test_size = int(len(subject_ids) * self.test_split_size)
+        test_subjects = set(sample(list(subject_ids), test_size))
+
+        df[_SPLIT_COLUMN] = df[_SUBJECT_COLUMN].map(
+            lambda x: settings.YASA["split_labels"]["test"]
+            if x in test_subjects
+            else settings.YASA["split_labels"]["train"]
+        )
+        df[_SPLIT_COLUMN] = df[_SPLIT_COLUMN].astype("category")
+        return df
