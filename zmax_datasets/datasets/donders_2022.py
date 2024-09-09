@@ -9,8 +9,8 @@ from zmax_datasets.datasets.base import (
 from zmax_datasets.exports.usleep import (
     ErrorHandling,
     ExistingFileHandling,
-    USleepExportStrategy,
 )
+from zmax_datasets.exports.yasa import YasaExportStrategy
 from zmax_datasets.utils.helpers import load_yaml_config
 from zmax_datasets.utils.logger import setup_logging
 
@@ -34,13 +34,20 @@ if __name__ == "__main__":
     config_file = settings.CONFIG_DIR / "datasets.yaml"
     config = load_yaml_config(config_file)
     dataset = Donders2022(**config["datasets"]["donders_2022"])
-    export_strategy = USleepExportStrategy(
-        data_types=["EEG R", "EEG L"],
-        data_type_labels={
-            "EEG L": "F7-Fpz",
-            "EEG R": "F8-Fpz",
-        },
-        existing_file_handling=ExistingFileHandling.OVERWRITE,
+    # export_strategy = USleepExportStrategy(
+    #     data_types=["EEG R", "EEG L"],
+    #     data_type_labels={
+    #         "EEG L": "F7-Fpz",
+    #         "EEG R": "F8-Fpz",
+    #     },
+    #     existing_file_handling=ExistingFileHandling.OVERWRITE,
+    #     error_handling=ErrorHandling.SKIP,
+    # )
+    export_strategy = YasaExportStrategy(
+        eeg_channel="EEG L",
+        eog_channel="EEG R",
+        sampling_frequency=100,
+        existing_file_handling=ExistingFileHandling.APPEND,
         error_handling=ErrorHandling.SKIP,
     )
-    export_strategy.export(dataset, Path("data/donders_2022"))
+    export_strategy.export(dataset, Path("data/yasa"))
