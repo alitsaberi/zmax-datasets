@@ -1,8 +1,9 @@
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import mne
 import numpy as np
@@ -15,11 +16,12 @@ from zmax_datasets.utils.exceptions import (
     SleepScoringFileNotFoundError,
     SleepScoringReadError,
 )
+from zmax_datasets.utils.transforms import resample
 
 logger = logging.getLogger(__name__)
 
 EEG_CHANNELS: list[str] = ["EEG L", "EEG R"]
-_DATA_TYPES: list[str] = EEG_CHANNELS + [
+DATA_TYPES: list[str] = EEG_CHANNELS + [
     "dX",
     "dY",
     "dZ",
@@ -67,7 +69,7 @@ class ZMaxRecording:
             for data_type_file in self.data_dir.glob(
                 f"*.{settings.ZMAX['data_types_file_extension']}"
             )
-            if (data_type := data_type_file.stem) in _DATA_TYPES
+            if (data_type := data_type_file.stem) in DATA_TYPES
         ]
 
     def __str__(self) -> str:
@@ -116,6 +118,58 @@ class ZMaxRecording:
             f"Failed to read sleep scoring file {self.sleep_scoring_file}"
             f" with default separators {_SLEEP_SCORING_FILE_SEPARATORS}"
         )
+
+
+@dataclass
+class DataTypeMapping:
+    output_label: str
+    input_data_types: list[str]
+    transforms: list[
+        Callable[[np.ndarray], np.ndarray]
+        | tuple[Callable[[np.ndarray], np.ndarray], dict[str, Any]]
+    ] = field(default_factory=list)
+
+    def map(self, recording: ZMaxRecording, sampling_frequency: float) -> np.ndarray:
+        data = self._get_raw_data(recording)
+        logger.debug(f"Raw data shape: {data.shape}")
+        data = self._transform_data(data, sampling_frequency)
+        logger.debug(
+            f"Processed data shape: {data.shape},"
+            f" sampling frequency: {sampling_frequency}"
+        )
+        return data
+
+    def _get_raw_data(self, recording: ZMaxRecording) -> np.ndarray:
+        data_list = []
+
+        for input_data_type in self.input_data_types:
+            raw = recording.read_raw_data(input_data_type)
+            data = raw.get_data().squeeze()
+
+            if raw.info["sfreq"] != settings.ZMAX["sampling_frequency"]:
+                logger.warning(
+                    f"Sampling frequency of {input_data_type} is {raw.info['sfreq']} Hz"
+                    f", but expected {settings.ZMAX['sampling_frequency']} Hz."
+                    " Resampling..."
+                )
+                data = resample(
+                    data, settings.ZMAX["sampling_frequency"], raw.info["sfreq"]
+                )
+
+            data_list.append(data)
+
+        return np.vstack(data_list) if len(data_list) > 1 else data_list[0]
+
+    def _transform_data(
+        self, data: np.ndarray, sampling_frequency: float
+    ) -> np.ndarray:
+        for transform in self.transforms:
+            if isinstance(transform, tuple):
+                data = transform[0](data, **transform[1])
+            else:
+                data = transform(data)
+
+        return resample(data, sampling_frequency, settings.ZMAX["sampling_frequency"])
 
 
 class ZMaxDataset(ABC):

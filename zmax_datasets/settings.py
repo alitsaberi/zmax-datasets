@@ -41,6 +41,7 @@ USLEEP = {
 
 ZMAX = {
     "data_types_file_extension": "edf",
+    "sampling_frequency": 256,
 }
 
 ############################# ZMax ##############################
