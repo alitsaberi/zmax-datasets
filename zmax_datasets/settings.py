@@ -18,7 +18,8 @@ LOG_FILE_EXTENSION = ".log.jsonl"
 
 DEFAULTS = {
     "period_length": 30,  # seconds
-    "hypnogram_label": "UNKNOWN",
+    # TODO: change hypnogram to sleep_stage in all files for consistent naming
+    "label": "UNKNOWN",
     "hynogram_mapping": {
         0: "W",
         1: "N1",

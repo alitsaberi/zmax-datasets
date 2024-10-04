@@ -7,9 +7,10 @@ import numpy as np
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
     DataTypeMapping,
+    SleepAnnotations,
     ZMaxDataset,
     ZMaxRecording,
-    read_hypnogram,
+    read_annotations,
 )
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
@@ -45,6 +46,7 @@ class USleepExportStrategy(ExportStrategy):
         self,
         data_type_mappigns: list[DataTypeMapping],
         sampling_frequency: int = settings.USLEEP["sampling_frequency"],
+        annotation_type: SleepAnnotations = SleepAnnotations.SLEEP_STAGE,
         existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
     ):
@@ -53,6 +55,7 @@ class USleepExportStrategy(ExportStrategy):
         )
         self.data_type_mappigns = data_type_mappigns
         self.sampling_frequency = sampling_frequency
+        self.annotation_type = annotation_type
 
     def _export(self, dataset: ZMaxDataset, out_dir: Path) -> None:
         prepared_recordings = 0
@@ -115,7 +118,7 @@ class USleepExportStrategy(ExportStrategy):
         self,
         recording: ZMaxRecording,
         recording_out_dir: Path,
-        hypnogram_mapping: dict[int, str],
+        label_mapping: dict[int, str],
     ) -> None:
         logger.info("Extracting hypnogram...")
 
@@ -125,13 +128,15 @@ class USleepExportStrategy(ExportStrategy):
         )
         self._check_existing_file(out_file_path)
 
-        stages = read_hypnogram(recording, hypnogram_mapping=hypnogram_mapping)
+        annotations = read_annotations(
+            recording, annotation_type=self.annotation_type, label_mapping=label_mapping
+        )
 
-        initials, durations, stages = ndarray_to_ids_format(stages)
-        initials, durations, stages = squeeze_ids(initials, durations, stages)
+        initials, durations, annotations = ndarray_to_ids_format(annotations)
+        initials, durations, annotations = squeeze_ids(initials, durations, annotations)
 
         with open(out_file_path, "w") as out_file:
-            for i, d, s in zip(initials, durations, stages, strict=False):
+            for i, d, s in zip(initials, durations, annotations, strict=False):
                 out_file.write(f"{int(i)},{int(d)},{s}\n")
 
     def _check_existing_file(self, file_path: Path) -> None:

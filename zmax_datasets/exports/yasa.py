@@ -137,9 +137,7 @@ class YasaExportStrategy(ExportStrategy):
         return {
             key: settings.YASA["hypnogram_mapping"].get(
                 value,
-                settings.YASA["hypnogram_mapping"][
-                    settings.DEFAULTS["hypnogram_label"]
-                ],
+                settings.YASA["hypnogram_mapping"][settings.DEFAULTS["label"]],
             )
             for key, value in hypnogram_mapping.items()
         }
