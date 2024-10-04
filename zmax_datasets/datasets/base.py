@@ -1,7 +1,10 @@
+import importlib
+import inspect
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +17,7 @@ from zmax_datasets.datasets.utils import mapper
 from zmax_datasets.utils.exceptions import (
     MultipleSleepScoringFilesFoundError,
     SleepScoringFileNotFoundError,
+    SleepScoringFileNotSet,
     SleepScoringReadError,
 )
 from zmax_datasets.utils.transforms import resample
@@ -42,7 +46,12 @@ DATA_TYPES: list[str] = EEG_CHANNELS + [
     "RSSI",
 ]
 _SLEEP_SCORING_FILE_SEPARATORS: list[str] = [" ", "\t"]
-_SLEEP_SCORING_FILE_COLUMNS = ["sleep_stage", "arousal"]
+_IGNORED_MODULES = ["__init__", "base", "utils"]
+
+
+class SleepAnnotations(Enum):
+    SLEEP_STAGE = "sleep_stage"
+    AROUSAL = "arousal"
 
 
 @dataclass
@@ -50,6 +59,7 @@ class ZMaxRecording:
     subject_id: str
     session_id: str
     data_dir: Path
+    # TODO: change sleep_scoring to annotations in all files for consistent naming
     _sleep_scoring_file: Path | None = field(default=None, repr=False, init=False)
 
     @property
@@ -100,12 +110,17 @@ class ZMaxRecording:
         return raw
 
     def read_sleep_scoring(self) -> pd.DataFrame:
+        if self._sleep_scoring_file is None:
+            raise SleepScoringFileNotSet(
+                f"The sleep scoring file is not set for recording {self}"
+            )
+
         for separator in _SLEEP_SCORING_FILE_SEPARATORS:
             try:
                 return pd.read_csv(
                     self.sleep_scoring_file,
                     sep=separator,
-                    names=_SLEEP_SCORING_FILE_COLUMNS,
+                    names=[annotation.value for annotation in SleepAnnotations],
                     dtype=int,
                 )
             except ValueError as e:
@@ -236,17 +251,38 @@ class ZMaxDataset(ABC):
     def _get_sleep_scoring_file(self, recording: ZMaxRecording) -> Path: ...
 
 
-def read_hypnogram(
+def read_annotations(
     recording: ZMaxRecording,
-    hypnogram_mapping: dict[int, str] | None = None,
-    default_hypnogram_label: str = settings.DEFAULTS["hypnogram_label"],
+    annotation_type: SleepAnnotations = SleepAnnotations.SLEEP_STAGE,
+    label_mapping: dict[int, str] | None = None,
+    default_label: str = settings.DEFAULTS["label"],
 ) -> np.ndarray:
-    stages = recording.read_sleep_scoring()[
-        _SLEEP_SCORING_FILE_COLUMNS[0]
-    ].values.squeeze()
-    logger.debug(f"Stages shape: {stages.shape}")
+    annotations = recording.read_sleep_scoring()[annotation_type.value].values.squeeze()
+    logger.debug(f"{annotation_type.value} annotations shape: {annotations.shape}")
 
-    if hypnogram_mapping is not None:
-        stages = mapper(hypnogram_mapping)(stages, default_hypnogram_label)
+    if label_mapping is not None:
+        annotations = mapper(label_mapping)(annotations, default_label)
 
-    return stages
+    return annotations
+
+
+def load_dataset_classes() -> dict[str, type[ZMaxDataset]]:
+    datasets = {}
+    datasets_dir = Path(__file__).parent
+
+    for file_path in datasets_dir.rglob("*.py"):  # Recursively find all .py files
+        module_name = file_path.stem
+
+        if module_name in _IGNORED_MODULES:
+            continue
+
+        spec = importlib.util.spec_from_file_location(module_name, file_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        # Inspect for classes that are subclasses of the base class
+        for name, obj in inspect.getmembers(module, inspect.isclass):
+            if issubclass(obj, ZMaxDataset) and obj is not ZMaxDataset:
+                datasets[name] = obj
+
+    return datasets

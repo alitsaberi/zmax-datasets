@@ -1,47 +1,46 @@
-datasets:
-  donders_2022:
-    data_dir: /project/3013097.06
-    zmax_dir_pattern: Data/s*/n*/zmax/
-    sleep_scoring_file_pattern: "{subject_id} {session_id}_psg.txt"
-    hypnogram_mapping:
-      0: "W"
-      1: "N1"
-      2: "N2"
-      3: "N3"
-      4: "REM"
-      -1: "UNKNOWN"
-  qs:
-    data_dir: /project/3022033.01
-    zmax_dir_pattern: data/PSG/Zmax/original_recordings/*/*/
-    sleep_scoring_dir: /project/3022033.01/Organized QS data/All_in_one_scoring_for_ZMax/
-    hypnogram_mapping:
-      0: "W"
-      1: "N1"
-      2: "N2"
-      3: "N3"
-      5: "REM"
-      -1: "UNKNOWN"
-  donders_2018:
-    data_dir: /project/3013080.01
-    zmax_dir_pattern: Donders2018/Zmax_Data/P*/night*
-    sleep_scoring_dir: /project/3013080.01/AdaptedScorings/All_in_one_scoring_for_ZMax
-    sleep_scoring_file_pattern: "{subject_id} {session_id}_all_in_one_ZMax.txt"
-    hypnogram_mapping:
-      0: "W"
-      1: "N1"
-      2: "N2"
-      3: "N3"
-      5: "REM"
-      -1: "UNKNOWN"
-  karolinska:
-    data_dir: /project/3013080.01/Zmax_karolinska
-    zmax_dir_pattern: SNZ_*/ZMax/*
-    sleep_scoring_dir: /project/3013097.06/AdaptedScorings/Karolinska/All_in_one_scoring_for_ZMax
-    sleep_scoring_file_pattern: "{subject_id} {session_id}_all_in_one_ZMax.txt"
-    hypnogram_mapping:
-      0: "W"
-      1: "N1"
-      2: "N2"
-      3: "N3"
-      4: "REM"
-      -1: "UNKNOWN"
+Donders2022:
+  data_dir: /project/3013097.06
+  zmax_dir_pattern: Data/s*/n*/zmax/
+  sleep_scoring_file_pattern: "{subject_id} {session_id}_psg.txt"
+  hypnogram_mapping:
+    0: "W"
+    1: "N1"
+    2: "N2"
+    3: "N3"
+    4: "REM"
+    -1: "UNKNOWN"
+QS:
+  data_dir: /project/3022033.01
+  zmax_dir_pattern: data/PSG/Zmax/original_recordings/*/*/
+  sleep_scoring_dir: /project/3022033.01/Organized QS data/All_in_one_scoring_for_ZMax/
+  hypnogram_mapping:
+    0: "W"
+    1: "N1"
+    2: "N2"
+    3: "N3"
+    5: "REM"
+    -1: "UNKNOWN"
+Donders2018:
+  data_dir: /project/3013080.01
+  zmax_dir_pattern: Donders2018/Zmax_Data/P*/night*
+  sleep_scoring_dir: /project/3013080.01/AdaptedScorings/All_in_one_scoring_for_ZMax
+  sleep_scoring_file_pattern: "{subject_id} {session_id}_all_in_one_ZMax.txt"
+  hypnogram_mapping:
+    0: "W"
+    1: "N1"
+    2: "N2"
+    3: "N3"
+    5: "REM"
+    -1: "UNKNOWN"
+Karolinska:
+  data_dir: /project/3013080.01/Zmax_karolinska
+  zmax_dir_pattern: SNZ_*/ZMax/*
+  sleep_scoring_dir: /project/3013097.06/AdaptedScorings/Karolinska/All_in_one_scoring_for_ZMax
+  sleep_scoring_file_pattern: "{subject_id} {session_id}_all_in_one_ZMax.txt"
+  hypnogram_mapping:
+    0: "W"
+    1: "N1"
+    2: "N2"
+    3: "N3"
+    4: "REM"
+    -1: "UNKNOWN"
