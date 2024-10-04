@@ -12,7 +12,7 @@ from zmax_datasets.datasets.base import (
     EEG_CHANNELS,
     ZMaxDataset,
     ZMaxRecording,
-    read_hypnogram,
+    read_annotations,
 )
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
@@ -137,9 +137,7 @@ class YasaExportStrategy(ExportStrategy):
         return {
             key: settings.YASA["hypnogram_mapping"].get(
                 value,
-                settings.YASA["hypnogram_mapping"][
-                    settings.DEFAULTS["hypnogram_label"]
-                ],
+                settings.YASA["hypnogram_mapping"][settings.DEFAULTS["label"]],
             )
             for key, value in hypnogram_mapping.items()
         }
@@ -152,9 +150,7 @@ class YasaExportStrategy(ExportStrategy):
             logger.info(f"-> Recording {i+1}: {recording}")
             try:
                 features = self._extract_features(recording)
-                hypnogram = read_hypnogram(
-                    recording, hypnogram_mapping=hypnogram_mapping
-                )
+                hypnogram = read_annotations(recording, label_mapping=hypnogram_mapping)
 
                 if len(features) != len(hypnogram):
                     raise HypnogramMismatchError(len(features), len(hypnogram))

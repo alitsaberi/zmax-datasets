@@ -2,6 +2,7 @@ __pycache__/
 .venv/
 .vscode/
 .ipynb_checkpoints/
+.DS_Store
 
 logs/*
 data/*
