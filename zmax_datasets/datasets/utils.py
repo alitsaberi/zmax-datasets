@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from scipy.signal import resample_poly
@@ -13,5 +14,5 @@ def resample(
     return resample_poly(data, sampling_frequency, old_sampling_frequency, axis=axis)
 
 
-def mapper(mapping: dict[int, str]) -> Callable[[np.ndarray, int], np.ndarray]:
+def mapper(mapping: dict[int, Any]) -> Callable[[np.ndarray, Any], np.ndarray]:
     return np.vectorize(mapping.get)

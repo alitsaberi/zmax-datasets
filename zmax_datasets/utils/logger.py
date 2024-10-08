@@ -33,8 +33,6 @@ LOG_RECORD_BUILTIN_ATTRS = {
     "taskName",
 }
 
-LOGGING_CONFIG_FILE_NAME = "logging.yaml"
-
 
 class JSONFormatter(logging.Formatter):
     def __init__(
@@ -78,6 +76,9 @@ class JSONFormatter(logging.Formatter):
         return message
 
 
-def setup_logging() -> None:
+def setup_logging(file_name: str | None = settings.PACKAGE_NAME) -> None:
     config = load_yaml_config(settings.LOGGING_CONFIG_FILE)
+    config["handlers"]["file"]["filename"] = (
+        settings.LOGS_DIR / f"{file_name}{settings.LOG_FILE_EXTENSION}"
+    )
     logging.config.dictConfig(config)

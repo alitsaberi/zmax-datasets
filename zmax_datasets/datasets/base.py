@@ -5,9 +5,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import mne
+import numpy as np
 import pandas as pd
 
 from zmax_datasets import settings
+from zmax_datasets.datasets.utils import mapper
 from zmax_datasets.utils.exceptions import (
     MultipleSleepScoringFilesFoundError,
     SleepScoringFileNotFoundError,
@@ -16,8 +18,8 @@ from zmax_datasets.utils.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-_EEG_CHANNELS: list[str] = ["EEG L", "EEG R"]
-_DATA_TYPES: list[str] = _EEG_CHANNELS + [
+EEG_CHANNELS: list[str] = ["EEG L", "EEG R"]
+_DATA_TYPES: list[str] = EEG_CHANNELS + [
     "dX",
     "dY",
     "dZ",
@@ -38,7 +40,7 @@ _DATA_TYPES: list[str] = _EEG_CHANNELS + [
     "RSSI",
 ]
 _SLEEP_SCORING_FILE_SEPARATORS: list[str] = [" ", "\t"]
-SLEEP_SCORING_FILE_COLUMNS = ["sleep_stage", "arousal"]
+_SLEEP_SCORING_FILE_COLUMNS = ["sleep_stage", "arousal"]
 
 
 @dataclass
@@ -92,6 +94,7 @@ class ZMaxRecording:
         )
         raw = mne.io.read_raw_edf(data_type_file, preload=False)
         logger.debug(f"Channels: {raw.info['chs']}")
+
         return raw
 
     def read_sleep_scoring(self) -> pd.DataFrame:
@@ -100,7 +103,7 @@ class ZMaxRecording:
                 return pd.read_csv(
                     self.sleep_scoring_file,
                     sep=separator,
-                    names=SLEEP_SCORING_FILE_COLUMNS,
+                    names=_SLEEP_SCORING_FILE_COLUMNS,
                     dtype=int,
                 )
             except ValueError as e:
@@ -122,9 +125,7 @@ class ZMaxDataset(ABC):
         zmax_dir_pattern: str,
         sleep_scoring_dir: Path | str | None = None,
         sleep_scoring_file_pattern: str | None = None,
-        hypnogram_mapping: dict[int, str] = settings.USLEEP[
-            "default_hypnogram_mapping"
-        ],
+        hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hynogram_mapping"],
     ):
         self.data_dir = Path(data_dir)
         self._zmax_dir_pattern = zmax_dir_pattern
@@ -179,3 +180,19 @@ class ZMaxDataset(ABC):
 
     @abstractmethod
     def _get_sleep_scoring_file(self, recording: ZMaxRecording) -> Path: ...
+
+
+def read_hypnogram(
+    recording: ZMaxRecording,
+    hypnogram_mapping: dict[int, str] | None = None,
+    default_hypnogram_label: str = settings.DEFAULTS["hypnogram_label"],
+) -> np.ndarray:
+    stages = recording.read_sleep_scoring()[
+        _SLEEP_SCORING_FILE_COLUMNS[0]
+    ].values.squeeze()
+    logger.debug(f"Stages shape: {stages.shape}")
+
+    if hypnogram_mapping is not None:
+        stages = mapper(hypnogram_mapping)(stages, default_hypnogram_label)
+
+    return stages
