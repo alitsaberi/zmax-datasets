@@ -6,11 +6,11 @@ import numpy as np
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
+    DataTypeMapping,
     ZMaxDataset,
     ZMaxRecording,
     read_hypnogram,
 )
-from zmax_datasets.datasets.utils import resample
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
 from zmax_datasets.utils.exceptions import MissingDataTypesError, SleepScoringReadError
@@ -43,8 +43,7 @@ def squeeze_ids(
 class USleepExportStrategy(ExportStrategy):
     def __init__(
         self,
-        data_types: list[str],
-        data_type_labels: dict[str, str] | None = None,
+        data_type_mappigns: list[DataTypeMapping],
         sampling_frequency: int = settings.USLEEP["sampling_frequency"],
         existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
@@ -52,14 +51,7 @@ class USleepExportStrategy(ExportStrategy):
         super().__init__(
             existing_file_handling=existing_file_handling, error_handling=error_handling
         )
-        self.data_types = data_types
-
-        if data_type_labels and (
-            invalid_data_types := set(data_type_labels.keys()) - set(data_types)
-        ):
-            logger.warning(f"Invalid keys in data_type_labels: {invalid_data_types}")
-
-        self.data_type_labels = data_type_labels
+        self.data_type_mappigns = data_type_mappigns
         self.sampling_frequency = sampling_frequency
 
     def _export(self, dataset: ZMaxDataset, out_dir: Path) -> None:
@@ -101,24 +93,18 @@ class USleepExportStrategy(ExportStrategy):
 
         with h5py.File(out_file_path, "w") as out_file:
             out_file.create_group("channels")
-            for index, data_type in enumerate(self.data_types):
-                data = self._get_resampled_data(recording, data_type)
-                self._write_data_to_hdf5(out_file, data_type, data, index)
+            for index, data_type_mapping in enumerate(self.data_type_mappigns):
+                data = data_type_mapping.map(recording, self.sampling_frequency)
+                self._write_data_to_hdf5(
+                    out_file, data_type_mapping.output_label, data, index
+                )
             out_file.attrs["sample_rate"] = self.sampling_frequency
 
-    def _get_resampled_data(
-        self, recording: ZMaxRecording, data_type: str
-    ) -> np.ndarray:
-        raw = recording.read_raw_data(data_type)
-        return resample(
-            raw.get_data().squeeze(), self.sampling_frequency, raw.info["sfreq"]
-        )
-
     def _write_data_to_hdf5(
-        self, out_file: h5py.File, data_type: str, data: np.ndarray, index: int
+        self, out_file: h5py.File, data_type_name: str, data: np.ndarray, index: int
     ) -> None:
         dataset = out_file["channels"].create_dataset(
-            self.data_type_labels.get(data_type, data_type),
+            data_type_name,
             data=data,
             chunks=True,
             compression="gzip",
