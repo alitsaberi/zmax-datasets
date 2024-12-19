@@ -56,11 +56,13 @@ class SleepAnnotations(Enum):
 
 @dataclass
 class ZMaxRecording:
-    subject_id: str
+    subject_id: str  # change these two to identifier
     session_id: str
     data_dir: Path
     # TODO: change sleep_scoring to annotations in all files for consistent naming
     _sleep_scoring_file: Path | None = field(default=None, repr=False, init=False)
+
+    # TODO: add post_init to check if data_dir exists
 
     @property
     def sleep_scoring_file(self) -> Path | None:
@@ -100,6 +102,9 @@ class ZMaxRecording:
         Raises:
             FileNotFoundError: If the EDF file for the specified data type is not found.
         """
+
+        # TODO: add check if data_type is in DATA_TYPES
+
         logger.info(f"Extracting {data_type}")
         data_type_file = (
             self.data_dir / f"{data_type}.{settings.ZMAX['data_types_file_extension']}"
