@@ -70,7 +70,7 @@ if __name__ == "__main__":
     setup_logging()
     config_file = settings.CONFIG_DIR / "datasets.yaml"
     config = load_yaml_config(config_file)
-    dataset = QS(**config["datasets"]["qs"])
+    dataset = QS(**config["QS"])
     sampling_frequency = settings.ZMAX["sampling_frequency"]
     export_strategy = USleepExportStrategy(
         data_type_mappigns=[
@@ -155,7 +155,7 @@ if __name__ == "__main__":
         existing_file_handling=ExistingFileHandling.OVERWRITE,
         error_handling=ErrorHandling.SKIP,
     )
-    export_strategy.export(dataset, Path("data/qs"))
+    export_strategy.export(dataset, Path("/project/3013102.01/sleep_scoring/qs"))
     # export_strategy = YasaExportStrategy(
     #     eeg_channel="EEG L",
     #     eog_channel="EEG R",

@@ -18,7 +18,6 @@ from zmax_datasets.datasets.base import (
     SleepAnnotations,
     ZMaxDataset,
     load_dataset_classes,
-    read_annotations,
 )
 from zmax_datasets.utils.helpers import load_yaml_config
 from zmax_datasets.utils.logger import setup_logging
@@ -105,12 +104,10 @@ def _process_dataset(
             arousal_intervals, predicted_sleep_scores
         )
 
-        true_arousal_labels = read_annotations(
-            recording,
+        true_arousal_labels = recording.read_annotations(
             annotation_type=SleepAnnotations.AROUSAL,
         )[: len(predicted_arousal_labels)]
-        true_sleep_scoring_labels = read_annotations(
-            recording,
+        true_sleep_scoring_labels = recording.read_annotations(
             annotation_type=SleepAnnotations.SLEEP_STAGE,
         )[: len(predicted_arousal_labels)]
 
