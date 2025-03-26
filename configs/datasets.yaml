@@ -44,3 +44,13 @@ Karolinska:
     3: "N3"
     4: "REM"
     -1: "UNKNOWN"
+WearanizePlus:
+  data_dir: /project/3028005.01/2.Wearanize+_PlugNPlay_v1.0/Parquet
+  recording_file_pattern: Sub*.parquet
+  hypnogram_mapping:
+    0: "W"
+    1: "N1"
+    2: "N2"
+    3: "N3"
+    4: "REM"
+    -1: "UNKNOWN"

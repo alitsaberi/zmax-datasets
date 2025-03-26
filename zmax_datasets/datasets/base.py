@@ -85,7 +85,7 @@ class ZMaxRecording:
     def __str__(self) -> str:
         return f"{self.subject_id}_{self.session_id}"
 
-    def read_raw_data(self, data_type: str) -> mne.io.Raw:
+    def read_raw_data(self, data_type: str) -> np.ndarray:
         """Extract and return raw data from an EDF file for a specific data type.
 
         This method reads an EDF file corresponding to the given data type
@@ -95,7 +95,7 @@ class ZMaxRecording:
             data_type (str): The type of data to extract (e.g., 'EEG L', 'EEG R').
 
         Returns:
-            mne.io.Raw: The raw MNE object containing the extracted data.
+            np.ndarray: The raw data for the specified data type.
 
         Raises:
             FileNotFoundError: If the EDF file for the specified data type is not found.
@@ -107,7 +107,7 @@ class ZMaxRecording:
         raw = mne.io.read_raw_edf(data_type_file, preload=False)
         logger.debug(f"Channels: {raw.info['chs']}")
 
-        return raw
+        return raw.get_data().squeeze()
 
     def read_sleep_scoring(self) -> pd.DataFrame:
         if self._sleep_scoring_file is None:
@@ -134,6 +134,20 @@ class ZMaxRecording:
             f" with default separators {_SLEEP_SCORING_FILE_SEPARATORS}"
         )
 
+    def read_annotations(
+        self,
+        annotation_type: SleepAnnotations = SleepAnnotations.SLEEP_STAGE,
+        label_mapping: dict[int, str] | None = None,
+        default_label: str = settings.DEFAULTS["label"],
+    ) -> np.ndarray:
+        annotations = self.read_sleep_scoring()[annotation_type.value].values.squeeze()
+        logger.debug(f"{annotation_type.value} annotations shape: {annotations.shape}")
+
+        if label_mapping is not None:
+            annotations = mapper(label_mapping)(annotations, default_label)
+
+        return annotations
+
 
 @dataclass
 class DataTypeMapping:
@@ -158,19 +172,7 @@ class DataTypeMapping:
         data_list = []
 
         for input_data_type in self.input_data_types:
-            raw = recording.read_raw_data(input_data_type)
-            data = raw.get_data().squeeze()
-
-            if raw.info["sfreq"] != settings.ZMAX["sampling_frequency"]:
-                logger.warning(
-                    f"Sampling frequency of {input_data_type} is {raw.info['sfreq']} Hz"
-                    f", but expected {settings.ZMAX['sampling_frequency']} Hz."
-                    " Resampling..."
-                )
-                data = resample(
-                    data, settings.ZMAX["sampling_frequency"], raw.info["sfreq"]
-                )
-
+            data = recording.read_raw_data(input_data_type)
             data_list.append(data)
 
         return np.vstack(data_list) if len(data_list) > 1 else data_list[0]

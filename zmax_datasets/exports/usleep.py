@@ -10,7 +10,6 @@ from zmax_datasets.datasets.base import (
     SleepAnnotations,
     ZMaxDataset,
     ZMaxRecording,
-    read_annotations,
 )
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
@@ -128,8 +127,8 @@ class USleepExportStrategy(ExportStrategy):
         )
         self._check_existing_file(out_file_path)
 
-        annotations = read_annotations(
-            recording, annotation_type=self.annotation_type, label_mapping=label_mapping
+        annotations = recording.read_annotations(
+            annotation_type=self.annotation_type, label_mapping=label_mapping
         )
 
         initials, durations, annotations = ndarray_to_ids_format(annotations)
