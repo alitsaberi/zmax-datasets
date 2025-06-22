@@ -5,14 +5,13 @@ from pathlib import Path
 PACKAGE_DIR = Path(__file__).resolve().parent
 BASE_DIR = PACKAGE_DIR.parent
 CONFIG_DIR = BASE_DIR / "configs"
-LOGGING_CONFIG_FILE = CONFIG_DIR / "logging.yaml"
+DATASETS_CONFIG_FILE = CONFIG_DIR / "datasets.yaml"
 DATA_DIR = BASE_DIR / "data"
 LOGS_DIR = BASE_DIR / "logs"
 
 ############################ General ############################
 
 PACKAGE_NAME = PACKAGE_DIR.name
-LOG_FILE_EXTENSION = ".log.jsonl"
 
 ########################### Defaults ############################
 
@@ -27,6 +26,25 @@ DEFAULTS = {
         3: "N3",
         4: "REM",
         -1: "UNKNOWN",
+    },
+}
+
+########################### Logging #############################
+
+LOGGING = {
+    "log_file": LOGS_DIR / f"{PACKAGE_NAME}.log",
+    "handlers": {
+        "console": {
+            "level": "INFO",
+            "colorize": True,
+            "backtrace": True,
+        },
+        "file": {
+            "level": "DEBUG",
+            "rotation": "50 MB",
+            "enqueue": True,
+            "backtrace": True,
+        },
     },
 }
 

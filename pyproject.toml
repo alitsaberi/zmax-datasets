@@ -13,6 +13,8 @@ mne = "^1.7.1"
 h5py = "^3.11.0"
 scipy = "^1.14.0"
 typing-extensions = "^4.12.2"
+pyarrow = "^19.0.1"
+loguru = "^0.7.3"
 jupyterlab = {version = "^4.2.4", optional = true}
 yasa = {version = "^0.6.5", optional = true}
 setuptools = {version = "^74.1.2", optional = true}
@@ -22,7 +24,6 @@ slumber = {path = "../slumber", develop = true}
 plotly = {version = "^5.24.1", optional = true}
 ipywidgets = {version = "^8.1.5", optional = true}
 nbformat = {version = "^5.10.4", optional = true}
-pyarrow = "^19.0.1"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.7"
@@ -34,6 +35,9 @@ pytest = "^8.3.2"
 [tool.poetry.extras]
 yasa = ["yasa", "setuptools", "tqdm"]
 notebook = ["jupyterlab", "ipykernel", "plotly", "ipywidgets", "nbformat"]
+
+[tool.poetry.scripts]
+export = "zmax_datasets.scripts.export:main"
 
 [tool.ruff]
 exclude = [
