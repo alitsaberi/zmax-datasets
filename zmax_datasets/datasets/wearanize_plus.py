@@ -8,7 +8,11 @@ import numpy as np
 import pandas as pd
 
 from zmax_datasets import settings
-from zmax_datasets.datasets.base import DataTypeMapping, SleepAnnotations
+from zmax_datasets.datasets.base import (
+    Dataset,
+    DataTypeMapping,
+    SleepAnnotations,
+)
 from zmax_datasets.datasets.utils import mapper
 
 logger = logging.getLogger(__name__)
@@ -78,7 +82,7 @@ class WDataTypeMapping(DataTypeMapping):
         return np.vstack(data_list) if len(data_list) > 1 else data_list[0]
 
 
-class WearanizePlus:
+class WearanizePlus(Dataset):
     def __init__(
         self,
         data_dir: Path | str,

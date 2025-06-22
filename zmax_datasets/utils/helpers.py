@@ -1,5 +1,6 @@
 import inspect
 import pkgutil
+from collections.abc import Callable
 from datetime import datetime
 from importlib import import_module
 from pathlib import Path
@@ -92,3 +93,25 @@ def get_class_by_name(
         f"No class named '{class_name}' found in module"
         f"'{module.__name__}' or its submodules."
     )
+
+
+def create_class_by_name_resolver(
+    modules: ModuleType | list[ModuleType], base_class: type[T] | None = None
+) -> Callable[[T | str], T]:
+    if not isinstance(modules, list):
+        modules = [modules]
+
+    def resolve(v: T | str) -> T:
+        if not isinstance(v, str):
+            return v
+
+        for module in modules:
+            try:
+                return get_class_by_name(v, module, base_class)
+            except ValueError as e:
+                logger.debug(e)
+                continue
+
+        raise ValueError(f"No class named '{v}' found in modules {modules}")
+
+    return resolve

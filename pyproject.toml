@@ -24,6 +24,7 @@ slumber = {path = "../slumber", develop = true}
 plotly = {version = "^5.24.1", optional = true}
 ipywidgets = {version = "^8.1.5", optional = true}
 nbformat = {version = "^5.10.4", optional = true}
+pydantic = "^2.11.7"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.7"

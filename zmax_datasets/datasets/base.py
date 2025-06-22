@@ -189,7 +189,14 @@ class DataTypeMapping:
         return resample(data, sampling_frequency, settings.ZMAX["sampling_frequency"])
 
 
-class ZMaxDataset(ABC):
+class Dataset(ABC):
+    @abstractmethod
+    def get_recordings(
+        self, with_sleep_scoring: bool = False
+    ) -> Generator[ZMaxRecording, None, None]: ...
+
+
+class ZMaxDataset(Dataset):
     def __init__(
         self,
         data_dir: Path | str,
