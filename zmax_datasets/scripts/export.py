@@ -1,10 +1,12 @@
 import argparse
 from pathlib import Path
+from typing import Annotated, Any
 
 from loguru import logger
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter
 
 from zmax_datasets import datasets, settings
-from zmax_datasets.datasets.base import DATA_TYPES, DataTypeMapping, ZMaxDataset
+from zmax_datasets.datasets.base import DATA_TYPES, Dataset, DataTypeMapping
 from zmax_datasets.exports.usleep import (
     ErrorHandling,
     ExistingFileHandling,
@@ -12,11 +14,25 @@ from zmax_datasets.exports.usleep import (
 )
 from zmax_datasets.settings import LOGS_DIR
 from zmax_datasets.utils.helpers import (
+    create_class_by_name_resolver,
     generate_timestamped_file_name,
-    get_class_by_name,
     load_yaml_config,
 )
 from zmax_datasets.utils.logger import setup_logging
+
+
+class DatasetConfig(BaseModel):
+    name: str
+    dataset: Annotated[
+        type[Dataset],
+        BeforeValidator(create_class_by_name_resolver(datasets, Dataset)),
+    ] = Field(..., alias="class_name")
+    config: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def configure(self) -> "Dataset":
+        return self.dataset(**self.config)
 
 
 def parse_arguments():
@@ -39,18 +55,22 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def _get_datasets(datasets_to_export: list[str]) -> list[ZMaxDataset]:
-    config = load_yaml_config(settings.DATASETS_CONFIG_FILE)
-    available_datasets = list(config.keys())
+def _get_datasets(datasets_to_export: list[str]) -> dict[str, Dataset]:
+    datasets_config = TypeAdapter(list[DatasetConfig]).validate_python(
+        load_yaml_config(settings.DATASETS_CONFIG_FILE)
+    )
+    logger.info(f"Datasets: {datasets_config}")
+    available_datasets = [dataset.name for dataset in datasets_config]
     if invalid_datasets := set(datasets_to_export) - set(available_datasets):
         raise ValueError(
             f"Invalid dataset name: {invalid_datasets}. "
             f"Available datasets: {available_datasets}"
         )
-    return [
-        get_class_by_name(dataset_name, datasets, ZMaxDataset)(**config[dataset_name])
-        for dataset_name in datasets_to_export
-    ]
+    return {
+        dataset.name: dataset.configure()
+        for dataset in datasets_config
+        if dataset.name in datasets_to_export
+    }
 
 
 def _get_data_mappings(
@@ -86,8 +106,8 @@ def main() -> None:
     datasets = _get_datasets(args.datasets)
     data_mappings = _get_data_mappings(args.channels, args.rename_channels)
 
-    for dataset in datasets:
-        logger.info(f"Exporting dataset: {dataset.__class__.__name__}")
+    for dataset_name, dataset in datasets.items():
+        logger.info(f"Exporting dataset: {dataset_name}")
 
         export_strategy = USleepExportStrategy(
             data_type_mappigns=data_mappings,
@@ -102,9 +122,7 @@ def main() -> None:
             else ErrorHandling.RAISE,
         )
 
-        export_strategy.export(
-            dataset, Path(args.output_dir) / dataset.__class__.__name__
-        )
+        export_strategy.export(dataset, Path(args.output_dir) / dataset_name)
 
 
 if __name__ == "__main__":
