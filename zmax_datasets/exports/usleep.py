@@ -1,22 +1,23 @@
-import logging
 from pathlib import Path
 
 import h5py
 import numpy as np
+from loguru import logger
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
+    Dataset,
     DataTypeMapping,
+    Recording,
     SleepAnnotations,
-    ZMaxDataset,
-    ZMaxRecording,
 )
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
-from zmax_datasets.utils.exceptions import MissingDataTypesError, SleepScoringReadError
+from zmax_datasets.utils.exceptions import (
+    MissingDataTypeError,
+    SleepScoringReadError,
+)
 from zmax_datasets.utils.helpers import remove_tree
-
-logger = logging.getLogger(__name__)
 
 
 def ndarray_to_ids_format(
@@ -47,16 +48,18 @@ class USleepExportStrategy(ExportStrategy):
         sampling_frequency: int = settings.USLEEP["sampling_frequency"],
         annotation_type: SleepAnnotations = SleepAnnotations.SLEEP_STAGE,
         existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
+        missing_data_type_handling: ErrorHandling = ErrorHandling.RAISE,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
     ):
         super().__init__(
             existing_file_handling=existing_file_handling, error_handling=error_handling
         )
+        self.missing_data_type_handling = missing_data_type_handling
         self.data_type_mappigns = data_type_mappigns
         self.sampling_frequency = sampling_frequency
         self.annotation_type = annotation_type
 
-    def _export(self, dataset: ZMaxDataset, out_dir: Path) -> None:
+    def _export(self, dataset: Dataset, out_dir: Path) -> None:
         prepared_recordings = 0
         for i, recording in enumerate(dataset.get_recordings(with_sleep_scoring=True)):
             logger.info(f"-> Recording {i+1}: {recording}")
@@ -71,7 +74,7 @@ class USleepExportStrategy(ExportStrategy):
                 )
                 prepared_recordings += 1
             except (
-                MissingDataTypesError,
+                MissingDataTypeError,
                 SleepScoringReadError,
                 FileExistsError,
                 FileNotFoundError,
@@ -82,7 +85,7 @@ class USleepExportStrategy(ExportStrategy):
 
     def _extract_data_types(
         self,
-        recording: ZMaxRecording,
+        recording: Recording,
         recording_out_dir: Path,
     ) -> None:
         logger.info("Extracting data types...")
@@ -96,7 +99,18 @@ class USleepExportStrategy(ExportStrategy):
         with h5py.File(out_file_path, "w") as out_file:
             out_file.create_group("channels")
             for index, data_type_mapping in enumerate(self.data_type_mappigns):
-                data = data_type_mapping.map(recording, self.sampling_frequency)
+                try:
+                    data = data_type_mapping.map(recording, self.sampling_frequency)
+                except MissingDataTypeError as e:
+                    if self.missing_data_type_handling == ErrorHandling.SKIP:
+                        logger.warning(
+                            f"Skipping data type {data_type_mapping.output_label} for"
+                            f" recording {recording} because {e}"
+                        )
+                        continue
+
+                    raise e
+
                 self._write_data_to_hdf5(
                     out_file, data_type_mapping.output_label, data, index
                 )
@@ -115,7 +129,7 @@ class USleepExportStrategy(ExportStrategy):
 
     def _extract_hypnogram(
         self,
-        recording: ZMaxRecording,
+        recording: Recording,
         recording_out_dir: Path,
         label_mapping: dict[int, str],
     ) -> None:
@@ -146,7 +160,7 @@ class USleepExportStrategy(ExportStrategy):
             raise FileExistsError(f"File {file_path} already exists.")
 
     def _handle_error(
-        self, error: Exception, recording: ZMaxRecording, recording_out_dir: Path
+        self, error: Exception, recording: Recording, recording_out_dir: Path
     ) -> None:
         remove_tree(recording_out_dir)
         if self.error_handling == ErrorHandling.SKIP:

@@ -29,10 +29,7 @@ class DataType:
         return self.channel.split(" ").join("_")
 
 
-@dataclass
-class Recording:
-    subject_id: str
-
+class Recording(ABC):
     @cached_property
     def data_types(self) -> dict[str, DataType]:
         raise NotImplementedError
@@ -59,16 +56,16 @@ class Recording:
 
         return data
 
-    def _read_raw_data(self, data_type: DataType) -> np.ndarray:
-        raise NotImplementedError
+    @abstractmethod
+    def _read_raw_data(self, data_type: DataType) -> np.ndarray: ...
 
+    @abstractmethod
     def read_annotations(
         self,
         annotation_type: SleepAnnotations,
         label_mapping: dict[int, str] | None = None,
         default_label: str = settings.DEFAULTS["label"],
-    ) -> np.ndarray:
-        raise NotImplementedError
+    ) -> np.ndarray: ...
 
 
 @dataclass
@@ -83,7 +80,7 @@ class DataTypeMapping:
     def map(self, recording: Recording, sampling_frequency: float) -> np.ndarray:
         data = self._get_raw_data(recording, sampling_frequency)
         logger.debug(f"Raw data shape: {data.shape}")
-        data = self._transform_data(data, sampling_frequency)
+        data = self._transform_data(data)
         logger.debug(
             f"Processed data shape: {data.shape},"
             f" sampling frequency: {sampling_frequency}"

@@ -15,6 +15,9 @@ from zmax_datasets.datasets.base import (
 from zmax_datasets.datasets.base import (
     DataType as BaseDataType,
 )
+from zmax_datasets.datasets.base import (
+    Recording as BaseRecording,
+)
 from zmax_datasets.datasets.utils import mapper
 
 indices = {
@@ -35,7 +38,7 @@ class DataType(BaseDataType):
 
 
 @dataclass
-class Recording:
+class Recording(BaseRecording):
     file_path: Path
 
     @property
@@ -53,8 +56,10 @@ class Recording:
             channels = self.data_frame.loc[index, "SignalLabel"]
             sampling_rate = self.data_frame.loc[index, "SamplingRate"]
             for channel in channels:
-                data_type = DataType(index, channel, sampling_rate[channel])
-                data_types[str(data_type)] = data_type
+                data_type = DataType(
+                    channel=channel, sampling_rate=sampling_rate[channel], index=index
+                )
+                data_types[data_type.label] = data_type
         return data_types
 
     @cached_property

@@ -10,8 +10,8 @@ import yasa
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
     EEG_CHANNELS,
-    ZMaxDataset,
-    ZMaxRecording,
+    Dataset,
+    Recording,
 )
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
@@ -94,7 +94,7 @@ class YasaExportStrategy(ExportStrategy):
                 f"{eog_channel} is not a valid ZMax EEG channel."
             )
 
-    def _export(self, dataset: ZMaxDataset, out_dir: Path) -> None:
+    def _export(self, dataset: Dataset, out_dir: Path) -> None:
         out_file_path = out_dir / _OUT_FILE_NAME
 
         try:
@@ -142,7 +142,7 @@ class YasaExportStrategy(ExportStrategy):
         }
 
     def _process_recordings(
-        self, dataset: ZMaxDataset, hypnogram_mapping: dict
+        self, dataset: Dataset, hypnogram_mapping: dict
     ) -> list[pd.DataFrame]:
         dataset_features = []
         for i, recording in enumerate(dataset.get_recordings(with_sleep_scoring=True)):
@@ -169,7 +169,7 @@ class YasaExportStrategy(ExportStrategy):
 
     def _extract_features(
         self,
-        recording: ZMaxRecording,
+        recording: Recording,
     ) -> pd.DataFrame:
         combined_raw = self._create_combined_raw(recording)
 
@@ -185,7 +185,7 @@ class YasaExportStrategy(ExportStrategy):
 
         return features
 
-    def _create_combined_raw(self, recording: ZMaxRecording) -> mne.io.Raw:
+    def _create_combined_raw(self, recording: Recording) -> mne.io.Raw:
         raw_eeg = self._read_raw_data(recording, self.eeg_channel)
 
         if not self.eog_channel:
@@ -213,7 +213,7 @@ class YasaExportStrategy(ExportStrategy):
 
         return mne.io.RawArray(combined_data, combined_info)
 
-    def _read_raw_data(self, recording: ZMaxRecording, data_type: str) -> mne.io.Raw:
+    def _read_raw_data(self, recording: Recording, data_type: str) -> mne.io.Raw:
         raw = recording.read_raw_data(data_type)
         raw.resample(self.sampling_frequency, npad="auto")
         return raw
