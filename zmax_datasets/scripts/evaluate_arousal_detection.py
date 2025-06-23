@@ -13,13 +13,14 @@ from slumber.processing.sleep_scoring import UTimeModel, score
 from slumber.utils.data import Data
 from utime.utils.system import find_and_set_gpus
 
-from zmax_datasets import settings
+from zmax_datasets import datasets, settings
 from zmax_datasets.datasets.base import (
+    Dataset,
     SleepAnnotations,
     ZMaxDataset,
     load_dataset_classes,
 )
-from zmax_datasets.utils.helpers import load_yaml_config
+from zmax_datasets.utils.helpers import get_class_by_name, load_yaml_config
 from zmax_datasets.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -159,10 +160,7 @@ def main(config: dict[str, Any]) -> None:
     all_results = []
 
     for dataset_name, dataset_config in config.items():
-        try:
-            dataset_class = dataset_classes[dataset_name]
-        except KeyError as e:
-            raise ValueError(f"Dataset class {dataset_name} not found.") from e
+        dataset_class = get_class_by_name(dataset_name, datasets, Dataset)
 
         dataset = dataset_class(**dataset_config)
         logger.info(f"Loaded dataset: {dataset_name}")

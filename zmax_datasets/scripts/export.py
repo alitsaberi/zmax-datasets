@@ -6,7 +6,7 @@ from loguru import logger
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter
 
 from zmax_datasets import datasets, settings
-from zmax_datasets.datasets.base import DATA_TYPES, Dataset, DataTypeMapping
+from zmax_datasets.datasets.base import Dataset, DataTypeMapping
 from zmax_datasets.exports.usleep import (
     ErrorHandling,
     ExistingFileHandling,
@@ -76,12 +76,6 @@ def _get_datasets(datasets_to_export: list[str]) -> dict[str, Dataset]:
 def _get_data_mappings(
     channels: list[str], rename_channels: list[str]
 ) -> list[DataTypeMapping]:
-    if invalid_channels := set(channels) - set(DATA_TYPES):
-        raise ValueError(
-            f"Invalid channel name: {invalid_channels}. "
-            f"Available channels: {DATA_TYPES}"
-        )
-
     rename_channels = rename_channels or channels
 
     if len(channels) != len(rename_channels):
