@@ -59,7 +59,7 @@ class DataTypes(Enum):
         return self.value.channel
 
     @classmethod
-    def get_by_channel(cls, channel: str) -> "DataType" | None:
+    def get_by_channel(cls, channel: str) -> DataType | None:
         for data_type in cls:
             if data_type.channel == channel:
                 return data_type
@@ -72,6 +72,7 @@ class DataTypes(Enum):
 
 @dataclass
 class Recording(BaseRecording):
+    subject_id: str
     session_id: str
     data_dir: Path
     # TODO: change sleep_scoring to annotations in all files for consistent naming

@@ -1,27 +1,23 @@
-import logging
 from functools import cached_property
 from pathlib import Path
 
 import pandas as pd
 
-from zmax_datasets.datasets.base import (
-    ZMaxDataset,
-    ZMaxRecording,
+from zmax_datasets.datasets.zmax import (
+    Dataset,
+    Recording,
 )
 from zmax_datasets.utils.exceptions import (
     MultipleSleepScoringFilesFoundError,
     SleepScoringFileNotFoundError,
 )
 
-logger = logging.getLogger(__name__)
-
-
 _SCORING_MAPPING_FILE = Path(__file__).parent / "qs_scoring_files.csv"
 _SCORING_MAPPING_FILE_COLUMNS = ["session_id", "scoring_file"]
 _SUBJECT_ID = "s1"
 
 
-class QS(ZMaxDataset):
+class QS(Dataset):
     @cached_property
     def _scoring_mapping(self) -> pd.DataFrame:
         return pd.read_csv(
@@ -33,7 +29,7 @@ class QS(ZMaxDataset):
     def _extract_ids_from_zmax_dir(cls, zmax_dir: Path) -> tuple[str, str]:
         return _SUBJECT_ID, zmax_dir.name
 
-    def _get_sleep_scoring_file(self, recording: ZMaxRecording) -> Path:
+    def _get_sleep_scoring_file(self, recording: Recording) -> Path:
         matching_rows = self._scoring_mapping[
             self._scoring_mapping["session_id"] == recording.session_id
         ]

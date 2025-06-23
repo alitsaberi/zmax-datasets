@@ -51,7 +51,7 @@ LOGGING = {
 ############################ USleep #############################
 
 USLEEP = {
-    "sampling_frequency": 128,
+    "sampling_frequency": 128.0,
     "data_types_file_extension": "h5",
     "hypnogram_file_extension": "ids",
 }
@@ -60,13 +60,13 @@ USLEEP = {
 
 ZMAX = {
     "data_types_file_extension": "edf",
-    "sampling_frequency": 256,
+    "sampling_frequency": 256.0,
 }
 
 ############################# ZMax ##############################
 
 YASA = {
-    "sampling_frequency": 100,
+    "sampling_frequency": 100.0,
     "hypnogram_mapping": {
         "W": "W",
         "N1": "N1",

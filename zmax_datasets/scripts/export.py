@@ -46,12 +46,18 @@ def parse_arguments():
         "--rename-channels", nargs="+", help="New names for the channels", type=str
     )
     parser.add_argument(
-        "--resample", action="store_true", help="Whether to resample data"
-    )
-    parser.add_argument(
         "--overwrite", action="store_true", help="Overwrite existing files"
     )
-    parser.add_argument("--skip-errors", action="store_true", help="Skip errors")
+    parser.add_argument(
+        "--skip-missing-data-types",
+        action="store_true",
+        help="Skip missing data types",
+    )
+    parser.add_argument(
+        "--skip-errors",
+        action="store_true",
+        help="Skip a recording if an error occurs",
+    )
     return parser.parse_args()
 
 
@@ -100,20 +106,25 @@ def main() -> None:
     datasets = _get_datasets(args.datasets)
     data_mappings = _get_data_mappings(args.channels, args.rename_channels)
 
+    missing_data_type_handling = (
+        ErrorHandling.SKIP if args.skip_missing_data_types else ErrorHandling.RAISE
+    )
+    error_handling = ErrorHandling.SKIP if args.skip_errors else ErrorHandling.RAISE
+    existing_file_handling = (
+        ExistingFileHandling.OVERWRITE
+        if args.overwrite
+        else ExistingFileHandling.RAISE_ERROR
+    )
+
     for dataset_name, dataset in datasets.items():
         logger.info(f"Exporting dataset: {dataset_name}")
 
         export_strategy = USleepExportStrategy(
             data_type_mappigns=data_mappings,
-            sampling_frequency=settings.USLEEP["sampling_frequency"]
-            if args.resample
-            else settings.ZMAX["sampling_frequency"],
-            existing_file_handling=ExistingFileHandling.OVERWRITE
-            if args.overwrite
-            else ExistingFileHandling.APPEND,
-            error_handling=ErrorHandling.SKIP
-            if args.skip_errors
-            else ErrorHandling.RAISE,
+            sampling_frequency=settings.USLEEP["sampling_frequency"],
+            existing_file_handling=existing_file_handling,
+            missing_data_type_handling=missing_data_type_handling,
+            error_handling=error_handling,
         )
 
         export_strategy.export(dataset, Path(args.output_dir) / dataset_name)

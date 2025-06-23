@@ -17,8 +17,6 @@ from zmax_datasets import datasets, settings
 from zmax_datasets.datasets.base import (
     Dataset,
     SleepAnnotations,
-    ZMaxDataset,
-    load_dataset_classes,
 )
 from zmax_datasets.utils.helpers import get_class_by_name, load_yaml_config
 from zmax_datasets.utils.logger import setup_logging
@@ -71,7 +69,7 @@ def _arousal_per_period(
 
 
 def _process_dataset(
-    dataset: ZMaxDataset, data_dir: Path, model: UTimeModel
+    dataset: Dataset, data_dir: Path, model: UTimeModel
 ) -> list[dict[str, Any]]:
     recordings = list(dataset.get_recordings(with_sleep_scoring=True))
     n_recordings = len(recordings)
@@ -150,9 +148,6 @@ def _process_dataset(
 
 def main(config: dict[str, Any]) -> None:
     find_and_set_gpus(1)
-
-    dataset_classes = load_dataset_classes()
-    logger.info(f"Loaded dataset classes: {list(dataset_classes.keys())}")
 
     logger.info("Loading model...")
     model = UTimeModel(**MODEL_ARGS)
