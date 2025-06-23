@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Generator
 from dataclasses import dataclass
 from functools import cached_property
@@ -6,16 +5,17 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
     Dataset,
-    DataTypeMapping,
     SleepAnnotations,
 )
+from zmax_datasets.datasets.base import (
+    DataType as BaseDataType,
+)
 from zmax_datasets.datasets.utils import mapper
-
-logger = logging.getLogger(__name__)
 
 indices = {
     "zmax": "Zmax",
@@ -23,6 +23,15 @@ indices = {
     "empatical": "Emp",
     "activepal": "Activepal",
 }
+
+
+@dataclass
+class DataType(BaseDataType):
+    index: str
+
+    @property
+    def label(self) -> str:
+        return f"{self.index}-{self.channel}"
 
 
 @dataclass
@@ -38,8 +47,15 @@ class Recording:
         return pd.read_parquet(self.file_path)
 
     @cached_property
-    def data_types(self) -> list[str]:
-        return self.data_frame.loc[indices["zmax"], "SignalLabel"]
+    def data_types(self) -> dict[str, DataType]:
+        data_types = {}
+        for index in self.data_frame.index:
+            channels = self.data_frame.loc[index, "SignalLabel"]
+            sampling_rate = self.data_frame.loc[index, "SamplingRate"]
+            for channel in channels:
+                data_type = DataType(index, channel, sampling_rate[channel])
+                data_types[str(data_type)] = data_type
+        return data_types
 
     @cached_property
     def sleep_scores(self) -> np.ndarray:
@@ -48,10 +64,10 @@ class Recording:
     def __str__(self) -> str:
         return f"{self.subject_id}"
 
-    def read_raw_data(self, data_type: str) -> np.ndarray:
-        return self.data_frame.loc[indices["zmax"], "SignalData"][data_type].astype(
-            np.float64
-        )
+    def _read_raw_data(self, data_type: DataType) -> np.ndarray:
+        return self.data_frame.loc[data_type.index, "SignalData"][
+            data_type.channel
+        ].astype(np.float64)
 
     def read_annotations(
         self,
@@ -69,17 +85,6 @@ class Recording:
             annotations = mapper(label_mapping)(annotations, default_label)
 
         return annotations
-
-
-@dataclass
-class WDataTypeMapping(DataTypeMapping):
-    def _get_raw_data(self, recording: Recording) -> np.ndarray:
-        data_list = []
-
-        for input_data_type in self.input_data_types:
-            data_list.append(recording.read_raw_data(input_data_type))
-
-        return np.vstack(data_list) if len(data_list) > 1 else data_list[0]
 
 
 class WearanizePlus(Dataset):
