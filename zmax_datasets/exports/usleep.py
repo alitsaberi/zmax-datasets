@@ -44,7 +44,7 @@ def squeeze_ids(
 class USleepExportStrategy(ExportStrategy):
     def __init__(
         self,
-        data_type_mappigns: list[DataTypeMapping],
+        data_type_mappings: list[DataTypeMapping],
         sampling_frequency: int = settings.USLEEP["sampling_frequency"],
         annotation_type: SleepAnnotations = SleepAnnotations.SLEEP_STAGE,
         existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
@@ -55,7 +55,7 @@ class USleepExportStrategy(ExportStrategy):
             existing_file_handling=existing_file_handling, error_handling=error_handling
         )
         self.missing_data_type_handling = missing_data_type_handling
-        self.data_type_mappigns = data_type_mappigns
+        self.data_type_mappings = data_type_mappings
         self.sampling_frequency = sampling_frequency
         self.annotation_type = annotation_type
 
@@ -99,7 +99,7 @@ class USleepExportStrategy(ExportStrategy):
         index = 0
         with h5py.File(out_file_path, "w") as out_file:
             out_file.create_group("channels")
-            for data_type_mapping in self.data_type_mappigns:
+            for data_type_mapping in self.data_type_mappings:
                 try:
                     data = data_type_mapping.map(recording, self.sampling_frequency)
                 except MissingDataTypeError as e:

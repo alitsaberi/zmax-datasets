@@ -26,7 +26,7 @@ class DataType:
 
     @property
     def label(self) -> str:
-        return self.channel.split(" ").join("_")
+        return "_".join(self.channel.split(" "))
 
 
 class Recording(ABC):
