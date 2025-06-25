@@ -96,9 +96,10 @@ class USleepExportStrategy(ExportStrategy):
         )
         self._check_existing_file(out_file_path)
 
+        index = 0
         with h5py.File(out_file_path, "w") as out_file:
             out_file.create_group("channels")
-            for index, data_type_mapping in enumerate(self.data_type_mappigns):
+            for data_type_mapping in self.data_type_mappigns:
                 try:
                     data = data_type_mapping.map(recording, self.sampling_frequency)
                 except MissingDataTypeError as e:
@@ -114,6 +115,13 @@ class USleepExportStrategy(ExportStrategy):
                 self._write_data_to_hdf5(
                     out_file, data_type_mapping.output_label, data, index
                 )
+                index += 1
+
+            if index == 0:
+                raise MissingDataTypeError(
+                    f"No data types found for recording {recording}"
+                )
+
             out_file.attrs["sample_rate"] = self.sampling_frequency
 
     def _write_data_to_hdf5(
