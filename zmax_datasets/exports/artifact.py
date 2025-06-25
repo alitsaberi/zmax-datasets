@@ -69,11 +69,17 @@ class ArtifactExportStrategy(ExportStrategy):
         self._check_existing_file(out_file_path)
 
         # Assuming data_type_mappings[0] and [1] are EEG, [2] is movement
-        eeg_left = self.eeg_left_data_type_mapping.map(
-            recording, settings.ARTIFACT_DETECTION["sampling_frequency"]
+        eeg_left = (
+            self.eeg_left_data_type_mapping.map(
+                recording, settings.ARTIFACT_DETECTION["sampling_frequency"]
+            )
+            * 1e6
         )
-        eeg_right = self.eeg_right_data_type_mapping.map(
-            recording, settings.ARTIFACT_DETECTION["sampling_frequency"]
+        eeg_right = (
+            self.eeg_right_data_type_mapping.map(
+                recording, settings.ARTIFACT_DETECTION["sampling_frequency"]
+            )
+            * 1e6  # TODO: Some datasets are not in volts (e.g., wearanize_plusd)
         )
         movement = self.movement_data_type_mapping.map(
             recording, settings.ARTIFACT_DETECTION["sampling_frequency"]
@@ -89,12 +95,31 @@ class ArtifactExportStrategy(ExportStrategy):
             self._model,
         )
 
+        logger.debug(f"Usability scores shape: {usability_scores.shape}")
+
+        # Use np.unique to count occurrences of each unique label for each channel
+        unique_left, counts_left = np.unique(usability_scores[:, 0], return_counts=True)
+        unique_right, counts_right = np.unique(
+            usability_scores[:, 1], return_counts=True
+        )
+
+        label_counts_left = dict(zip(unique_left, counts_left, strict=False))
+        label_counts_right = dict(
+            zip(unique_right, counts_right, strict=False),
+        )
+
+        logger.info(f"Unique label counts for EEG left: {label_counts_left}")
+        logger.info(f"Unique label counts for EEG right: {label_counts_right}")
+
+        # Write usability scores to file
         with open(out_file_path, "w") as out_file:
             out_file.write(
                 f"{self.eeg_left_data_type_mapping.output_label},{self.eeg_right_data_type_mapping.output_label}\n"
             )
             for score in usability_scores:
                 out_file.write(f"{score[0]},{score[1]}\n")
+
+        logger.info(f"Saved usability scores to {out_file_path}")
 
     def _check_existing_file(self, file_path: Path) -> None:
         if (

@@ -42,6 +42,7 @@ notebook = ["jupyterlab", "ipykernel", "plotly", "ipywidgets", "nbformat"]
 
 [tool.poetry.scripts]
 export = "zmax_datasets.scripts.export:main"
+export-artifact = "zmax_datasets.scripts.export_artifact:main"
 
 [tool.ruff]
 exclude = [

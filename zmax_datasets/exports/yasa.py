@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 from random import sample
 
@@ -6,26 +5,24 @@ import mne
 import numpy as np
 import pandas as pd
 import yasa
+from loguru import logger
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
-    EEG_CHANNELS,
     Dataset,
     Recording,
 )
+from zmax_datasets.datasets.zmax import DataTypes
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
 from zmax_datasets.utils.exceptions import (
     ChannelLengthMismatchError,
     HypnogramMismatchError,
     InvalidZMaxDataTypeError,
-    MissingDataTypesError,
+    MissingDataTypeError,
     NoFeaturesExtractedError,
     SleepScoringReadError,
 )
-
-logger = logging.getLogger(__name__)
-
 
 _OUT_FILE_NAME = "zmax.parquet"
 _DATASET_COLUMN = "dataset"
@@ -85,13 +82,24 @@ class YasaExportStrategy(ExportStrategy):
         self.test_split_size = test_split_size
 
     def _validate_channels(self, eeg_channel: str, eog_channel: str | None) -> None:
-        if eeg_channel not in EEG_CHANNELS:
+        eeg_data_types = DataTypes.get_by_category("EEG")
+        eeg_data_type = DataTypes.get_by_channel(eeg_channel)
+        eog_data_type = DataTypes.get_by_channel(eog_channel) if eog_channel else None
+
+        if eeg_data_type is None or eeg_data_type not in eeg_data_types:
+            print("hi")
+            print(eeg_data_type)
             raise InvalidZMaxDataTypeError(
                 f"{eeg_channel} is not a valid ZMax EEG channel."
+                " Valid channels are:"
+                f" {[data_type.channel for data_type in eeg_data_types]}"
             )
-        if eog_channel and eog_channel not in EEG_CHANNELS:
+
+        if eog_data_type is None or eog_data_type not in eeg_data_types:
             raise InvalidZMaxDataTypeError(
-                f"{eog_channel} is not a valid ZMax EEG channel."
+                f"{eog_channel} is not a valid ZMax EOG channel."
+                " Valid channels are:"
+                f" {[data_type.channel for data_type in eeg_data_types]}"
             )
 
     def _export(self, dataset: Dataset, out_dir: Path) -> None:
@@ -157,7 +165,7 @@ class YasaExportStrategy(ExportStrategy):
                 features[settings.YASA["hypnogram_column"]] = hypnogram
                 dataset_features.append(features)
             except (
-                MissingDataTypesError,
+                MissingDataTypeError,
                 SleepScoringReadError,
                 FileNotFoundError,
                 HypnogramMismatchError,
