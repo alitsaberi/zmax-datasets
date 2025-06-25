@@ -88,12 +88,13 @@ YASA = {
 
 ARTIFACT_DETECTION = {
     "model_path": MODELS_DIR / "eegUsability_model_v0.7_lite.pkl",
+    "sampling_frequency": 256.0,
     "epoch_duration": 10,
     "n_features": {
         "tsfel": 36 + 18 + 336,
         "lite": 2838,
     },
-    "scores_channel_names": ["left", "right"],
+    "labels_file_extension": "csv",
 }
 
 #################################################################
