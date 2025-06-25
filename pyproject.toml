@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "zmax-datasets"
+name = "zmax_datasets"
 version = "0.1.0"
 description = ""
 authors = ["Ali Saberi <ali.saberi96@gmail.com>"]
@@ -11,7 +11,7 @@ numpy = "~1.23"
 pandas = "^2.2.2"
 mne = "^1.7.1"
 h5py = "^3.11.0"
-scipy = "^1.14.0"
+scipy = "1.8.1"
 typing-extensions = "^4.12.2"
 pyarrow = "^19.0.1"
 loguru = "^0.7.3"
@@ -20,11 +20,13 @@ yasa = {version = "^0.6.5", optional = true}
 setuptools = {version = "^74.1.2", optional = true}
 ipykernel = {version = "^6.29.5", optional = true}
 tqdm = {version = "^4.66.5", optional = true}
-slumber = {path = "../slumber", develop = true}
 plotly = {version = "^5.24.1", optional = true}
 ipywidgets = {version = "^8.1.5", optional = true}
 nbformat = {version = "^5.10.4", optional = true}
 pydantic = "^2.11.7"
+tsfel = {version = "0.1.4", optional = true}
+joblib = {version = "^1.5.1", optional = true}
+lightgbm = {version = "^4.6.0", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.7"
@@ -34,6 +36,7 @@ pre-commit = "^3.8.0"
 pytest = "^8.3.2"
 
 [tool.poetry.extras]
+artifact_detection = ["tsfel", "joblib", "lightgbm"]
 yasa = ["yasa", "setuptools", "tqdm"]
 notebook = ["jupyterlab", "ipykernel", "plotly", "ipywidgets", "nbformat"]
 
