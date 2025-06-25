@@ -8,6 +8,8 @@ CONFIG_DIR = BASE_DIR / "configs"
 DATASETS_CONFIG_FILE = CONFIG_DIR / "datasets.yaml"
 DATA_DIR = BASE_DIR / "data"
 LOGS_DIR = BASE_DIR / "logs"
+RESOURCES_DIR = BASE_DIR / "resources"
+MODELS_DIR = RESOURCES_DIR / "models"
 
 ############################ General ############################
 
@@ -80,6 +82,18 @@ YASA = {
         "train": "training",
         "test": "testing",
     },
+}
+
+############################# Artifact Detection ##############################
+
+ARTIFACT_DETECTION = {
+    "model_path": MODELS_DIR / "eegUsability_model_v0.7_lite.pkl",
+    "epoch_duration": 10,
+    "n_features": {
+        "tsfel": 36 + 18 + 336,
+        "lite": 2838,
+    },
+    "scores_channel_names": ["left", "right"],
 }
 
 #################################################################
