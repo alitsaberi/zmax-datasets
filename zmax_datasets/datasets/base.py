@@ -11,7 +11,6 @@ from loguru import logger
 from zmax_datasets import settings
 from zmax_datasets.datasets.utils import mapper
 from zmax_datasets.utils.exceptions import MissingDataTypeError
-from zmax_datasets.utils.transforms import resample
 
 
 class SleepAnnotations(Enum):
@@ -35,8 +34,9 @@ class Recording(ABC):
         raise NotImplementedError
 
     def read_raw_data(
-        self, data_type_label: str, sampling_frequency: float | None = None
-    ) -> np.ndarray:
+        self,
+        data_type_label: str,
+    ) -> tuple[np.ndarray, float]:
         logger.info(f"Extracting {data_type_label}")
         if data_type_label not in self.data_types:
             raise MissingDataTypeError(
@@ -45,16 +45,7 @@ class Recording(ABC):
 
         data_type = self.data_types[data_type_label]
         data = self._read_raw_data(data_type)
-
-        if sampling_frequency is not None:
-            logger.info(
-                f"Resampling {data_type_label} from"
-                f" {data_type.sampling_rate} Hz"
-                f" to {sampling_frequency} Hz"
-            )
-            data = resample(data, sampling_frequency, data_type.sampling_rate)
-
-        return data
+        return data, data_type.sampling_rate
 
     @abstractmethod
     def _read_raw_data(self, data_type: DataType) -> np.ndarray: ...
@@ -77,23 +68,21 @@ class DataTypeMapping:
         | tuple[Callable[[np.ndarray], np.ndarray], dict[str, Any]]
     ] = field(default_factory=list)
 
-    def map(self, recording: Recording, sampling_frequency: float) -> np.ndarray:
-        data = self._get_raw_data(recording, sampling_frequency)
+    def map(self, recording: Recording) -> np.ndarray:
+        data = self._get_raw_data(recording)
         logger.debug(f"Raw data shape: {data.shape}")
         data = self._transform_data(data)
-        logger.debug(
-            f"Processed data shape: {data.shape},"
-            f" sampling frequency: {sampling_frequency}"
-        )
+        logger.debug(f"Processed data shape: {data.shape}")
         return data
 
     def _get_raw_data(
-        self, recording: Recording, sampling_frequency: float
+        self,
+        recording: Recording,
     ) -> np.ndarray:
         data_list = []
 
         for data_type_label in self.input_data_types:
-            data = recording.read_raw_data(data_type_label, sampling_frequency)
+            data, _ = recording.read_raw_data(data_type_label)
             data_list.append(data)
 
         return np.vstack(data_list) if len(data_list) > 1 else data_list[0]

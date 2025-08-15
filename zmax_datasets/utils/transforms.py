@@ -1,6 +1,6 @@
 import numpy as np
 from mne.filter import filter_data
-from scipy.signal import find_peaks, resample_poly
+from scipy.signal import resample_poly
 
 
 def resample(
@@ -48,86 +48,6 @@ def fir_filter(
         If `low_cutoff` is less than `high_cutoff`, a bandpass filter is applied.
     """
     return filter_data(data, sampling_frequency, low_cutoff, high_cutoff)
-
-
-def extract_hrv(
-    ppg_signal: np.ndarray,
-    sampling_frequency: float,
-    distance: float = 0.5,
-    sliding_window_length: int = 10,
-    interpolate: bool = False,
-) -> np.ndarray:
-    """
-    Extract heart rate variability (HRV) features from the PPG signal.
-
-    Args:
-        ppg_signal (np.ndarray): The PPG signal.
-        sampling_frequency (float): The sampling frequency of the PPG signal in Hz.
-        distance (float): Minimum distance between peaks in seconds, corresponding to
-                          the minimum time between heartbeats
-                          (default is 0.5 seconds (120 bpm)).
-    """
-    # Detect peaks (heartbeats)
-    peaks = detect_peaks(ppg_signal, sampling_frequency, distance=distance)
-
-    # Extract inter-beat intervals (IBI)
-    ibi = extract_ibi(peaks, sampling_frequency)
-
-    # Compute HRV features (standard deviation of IBI) over a sliding window of IBIs
-    hrv = np.array(
-        [
-            np.std(ibi[max(0, i - sliding_window_length) : i + 1])
-            for i in range(len(ibi))
-        ]
-    )
-
-    if interpolate:
-        # Interpolate HRV values to match the length of ppg_signal
-        hrv = np.interp(np.arange(len(ppg_signal)), peaks[1:], hrv)
-
-    return hrv
-
-
-def detect_peaks(
-    ppg_signal: np.ndarray, sampling_frequency: float, distance: float = 0.5
-) -> np.ndarray:
-    """
-    Detects peaks (systolic peaks) in the PPG signal.
-
-    Args:
-        ppg_signal (np.ndarray): The PPG signal.
-        sampling_frequency (float): The sampling frequency of the PPG signal in Hz.
-        distance (float): Minimum distance between peaks in seconds, corresponding to
-                          the minimum time between heartbeats
-                          (default is 0.5 seconds (120 bpm)).
-
-    Returns:
-        np.ndarray: Indices of the detected peaks in the PPG signal.
-    """
-    # Convert distance to number of samples (minimum distance between peaks)
-    min_distance_samples = int(distance * sampling_frequency)
-
-    # Detect peaks using find_peaks from scipy
-    peaks, _ = find_peaks(ppg_signal, distance=min_distance_samples)
-
-    return peaks
-
-
-def extract_ibi(peaks: np.ndarray, sampling_frequency: float) -> np.ndarray:
-    """
-    Extracts Inter-Beat Intervals (IBI) from detected peaks in the PPG signal.
-
-    Args:
-        peaks (np.ndarray): Indices of detected peaks.
-        sampling_frequency (float): The sampling frequency of the PPG signal in Hz.
-
-    Returns:
-        np.ndarray: Inter-beat intervals (IBIs) in milliseconds (ms).
-    """
-
-    ibi = np.diff(peaks) / sampling_frequency
-
-    return ibi * 1000  # Convert to milliseconds (ms)
 
 
 def clip_noisy_values(
