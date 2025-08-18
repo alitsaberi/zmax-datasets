@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 
 import mne
@@ -21,6 +20,7 @@ from zmax_datasets.datasets.base import (
     Recording as BaseRecording,
 )
 from zmax_datasets.datasets.utils import mapper
+from zmax_datasets.sources.zmax.enums import DataTypes
 from zmax_datasets.utils.exceptions import (
     MultipleSleepScoringFilesFoundError,
     SleepScoringFileNotFoundError,
@@ -31,50 +31,11 @@ from zmax_datasets.utils.exceptions import (
 _SLEEP_SCORING_FILE_SEPARATORS = [" ", "\t"]
 
 
-class DataTypes(Enum):
-    EEG_RIGHT = DataType("EEG R", settings.ZMAX["sampling_frequency"])
-    EEG_LEFT = DataType("EEG L", settings.ZMAX["sampling_frequency"])
-    ACCELEROMETER_X = DataType("dX", settings.ZMAX["sampling_frequency"])
-    ACCELEROMETER_Y = DataType("dY", settings.ZMAX["sampling_frequency"])
-    ACCELEROMETER_Z = DataType("dZ", settings.ZMAX["sampling_frequency"])
-    BODY_TEMP = DataType("BODY TEMP", settings.ZMAX["sampling_frequency"])
-    BATTERY = DataType("BATT", settings.ZMAX["sampling_frequency"])
-    NOISE = DataType("NOISE", settings.ZMAX["sampling_frequency"])
-    LIGHT = DataType("LIGHT", settings.ZMAX["sampling_frequency"])
-    NASAL_LEFT = DataType("NASAL L", settings.ZMAX["sampling_frequency"])
-    NASAL_RIGHT = DataType("NASAL R", settings.ZMAX["sampling_frequency"])
-    OXIMETER_INFRARED_AC = DataType("OXY_IR_AC", settings.ZMAX["sampling_frequency"])
-    OXIMETER_RED_AC = DataType("OXY_R_AC", settings.ZMAX["sampling_frequency"])
-    OXIMETER_DARK_AC = DataType("OXY_DARK_AC", settings.ZMAX["sampling_frequency"])
-    OXIMETER_INFRARED_DC = DataType("OXY_IR_DC", settings.ZMAX["sampling_frequency"])
-    OXIMETER_RED_DC = DataType("OXY_R_DC", settings.ZMAX["sampling_frequency"])
-    OXIMETER_DARK_DC = DataType("OXY_DARK_DC", settings.ZMAX["sampling_frequency"])
-
-    @property
-    def category(self) -> str:
-        return self.name.split("_")[0]
-
-    @property
-    def channel(self) -> str:
-        return self.value.channel
-
-    @classmethod
-    def get_by_channel(cls, channel: str) -> DataType | None:
-        for data_type in cls:
-            if data_type.channel == channel:
-                return data_type
-        return None
-
-    @classmethod
-    def get_by_category(cls, category: str) -> list["DataType"]:
-        return [data_type for data_type in cls if data_type.category == category]
-
-
 @dataclass
 class Recording(BaseRecording):
-    subject_id: str
-    session_id: str
     data_dir: Path
+    subject_id: str | None = None
+    session_id: str | None = None
     # TODO: change sleep_scoring to annotations in all files for consistent naming
     _sleep_scoring_file: Path | None = field(default=None, repr=False, init=False)
 
@@ -97,9 +58,6 @@ class Recording(BaseRecording):
             )
             if (data_type := DataTypes.get_by_channel(file_path.stem)) is not None
         }
-
-    def __str__(self) -> str:
-        return f"{self.subject_id}_{self.session_id}"
 
     def _read_raw_data(self, data_type: DataType) -> np.ndarray:
         file_path = (

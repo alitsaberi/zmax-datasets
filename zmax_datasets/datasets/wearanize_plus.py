@@ -12,13 +12,13 @@ from zmax_datasets.datasets.base import (
     Dataset,
     SleepAnnotations,
 )
-from zmax_datasets.datasets.base import (
-    DataType as BaseDataType,
-)
-from zmax_datasets.datasets.base import (
+from zmax_datasets.datasets.base import (  # noqa: F401
     Recording as BaseRecording,
 )
 from zmax_datasets.datasets.utils import mapper
+from zmax_datasets.utils.data import (
+    DataType as BaseDataType,
+)
 
 indices = {
     "zmax": "Zmax",

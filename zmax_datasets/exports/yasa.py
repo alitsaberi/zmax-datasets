@@ -12,9 +12,9 @@ from zmax_datasets.datasets.base import (
     Dataset,
     Recording,
 )
-from zmax_datasets.datasets.zmax import DataTypes
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
+from zmax_datasets.sources.zmax.enums import DataTypes
 from zmax_datasets.utils.exceptions import (
     ChannelLengthMismatchError,
     HypnogramMismatchError,
