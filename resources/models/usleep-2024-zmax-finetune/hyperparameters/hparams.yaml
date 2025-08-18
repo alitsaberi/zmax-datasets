@@ -1,0 +1,26 @@
+build:
+  model_class_name: USleep
+  activation: elu
+  depth: 12
+  kernel_size: 9
+  dilation: 1
+  transition_window: 1
+  complexity_factor: 1.67
+  n_classes: 5
+  l2_reg:
+  batch_shape:
+  - 64
+  - 35
+  - 3840
+  - 1
+
+set_sample_rate: 128
+period_length: 30
+sleep_stage_annotations:
+  W: 0
+  N1: 1
+  N2: 2
+  N3: 3
+  REM: 4
+  UNKNOWN: -1
+  

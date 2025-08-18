@@ -29,6 +29,14 @@ DEFAULTS = {
         4: "REM",
         -1: "UNKNOWN",
     },
+    "hypnogram_reverse_mapping": {
+        "W": 0,
+        "N1": 1,
+        "N2": 2,
+        "N3": 3,
+        "REM": 4,
+        "UNKNOWN": -1,
+    },
 }
 
 ########################### Logging #############################
@@ -39,7 +47,7 @@ LOGGING = {
         "console": {
             "level": "INFO",
             "colorize": True,
-            "backtrace": True,
+            "backtrace": False,
         },
         "file": {
             "level": "DEBUG",
@@ -102,6 +110,15 @@ ARTIFACT_DETECTION = {
 IBI = {
     "sampling_frequency": 2.0,
     "segment_duration": 30,
+}
+
+################################# Sleep Scoring ################################
+
+SLEEP_SCORING = {
+    "filter": {
+        "low_cutoff": 0.3,
+        "high_cutoff": 30,
+    }
 }
 
 ################################################################################

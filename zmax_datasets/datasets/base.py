@@ -10,22 +10,13 @@ from loguru import logger
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.utils import mapper
+from zmax_datasets.utils.data import DataType
 from zmax_datasets.utils.exceptions import MissingDataTypeError
 
 
 class SleepAnnotations(Enum):
     SLEEP_STAGE = "sleep_stage"
     AROUSAL = "arousal"
-
-
-@dataclass
-class DataType:
-    channel: str
-    sampling_rate: float
-
-    @property
-    def label(self) -> str:
-        return "_".join(self.channel.split(" "))
 
 
 class Recording(ABC):
@@ -45,7 +36,7 @@ class Recording(ABC):
 
         data_type = self.data_types[data_type_label]
         data = self._read_raw_data(data_type)
-        return data, data_type.sampling_rate
+        return data, data_type.sampling_rate  # TODO: return Data object
 
     @abstractmethod
     def _read_raw_data(self, data_type: DataType) -> np.ndarray: ...

@@ -28,6 +28,12 @@ tsfel = {version = "0.1.4", optional = true}
 joblib = {version = "^1.5.1", optional = true}
 lightgbm = {version = "^4.6.0", optional = true}
 heartpy = "^1.2.7"
+tensorflow-io-gcs-filesystem = {version = "~0.31", optional = true, markers = "sys_platform != 'darwin'"}
+tensorflow-addons = {version = "~0.22", optional = true}
+utime = {git = "https://github.com/alitsaberi/U-Time.git", optional = true}
+tensorflow = {version = ">=2.10.0,<2.11", optional = true, markers = "sys_platform != 'darwin'"}
+tensorflow-macos = {version = ">=2.10.0,<2.11", optional = true, platform = "darwin"}
+psg-utils = {version = "^0.1.6", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.7"
@@ -40,11 +46,13 @@ pytest = "^8.3.2"
 artifact_detection = ["tsfel", "joblib", "lightgbm"]
 yasa = ["yasa", "setuptools", "tqdm"]
 notebook = ["jupyterlab", "ipykernel", "plotly", "ipywidgets", "nbformat"]
+sleep_scoring = ["tensorflow-io-gcs-filesystem", "tensorflow-addons", "utime", "tensorflow", "tensorflow-macos", "psg-utils"]
 
 [tool.poetry.scripts]
 export = "zmax_datasets.scripts.export:main"
 export-artifact = "zmax_datasets.scripts.export_artifact:main"
 export-ibi = "zmax_datasets.scripts.export_ibi:main"
+sleep-scoring = "zmax_datasets.scripts.sleep_scoring:main"
 
 [tool.ruff]
 exclude = [
@@ -98,7 +106,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = false
 docstring-code-line-length = "dynamic"
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+

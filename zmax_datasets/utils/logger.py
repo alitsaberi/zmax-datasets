@@ -35,6 +35,7 @@ class InterceptHandler(logging.Handler):
 def setup_logging(
     log_file: Path = settings.LOGGING["log_file"],
     config: dict[str, Any] = settings.LOGGING,
+    intercept_standard_logging: bool = False,
 ) -> None:
     logger.remove()
 
@@ -52,4 +53,5 @@ def setup_logging(
     # Intercept standard library logging
     # This way, all logs from the root logger and other libraries using standard
     # logging will be properly formatted and handled by Loguru
-    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+    if intercept_standard_logging:
+        logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
