@@ -6,21 +6,23 @@ from zmax_datasets.utils.data import Data
 
 
 class Resample(Transform):
+    def __init__(self, new_sample_rate: float):
+        self.new_sample_rate = new_sample_rate
+
     def __call__(
         self,
         data: Data,
-        new_sample_rate: int,
         **kwargs,
     ) -> Data:
         return Data(
             resample_poly(
                 data.array.astype(np.float64),
-                new_sample_rate,
+                self.new_sample_rate,
                 data.sample_rate,
                 axis=0,
                 **kwargs,
             ),
-            sample_rate=new_sample_rate,
+            sample_rate=self.new_sample_rate,
             channel_names=data.channel_names,
             timestamp_offset=data.timestamps[0],
         )

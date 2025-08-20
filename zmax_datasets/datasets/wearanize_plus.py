@@ -41,6 +41,9 @@ class DataType(BaseDataType):
 class Recording(BaseRecording):
     file_path: Path
 
+    def __str__(self) -> str:
+        return f"{self.subject_id}"
+
     @property
     def subject_id(self) -> str:
         return self.file_path.stem
@@ -65,9 +68,6 @@ class Recording(BaseRecording):
     @cached_property
     def sleep_scores(self) -> np.ndarray:
         return self.data_frame.loc[indices["psg"], "SleepScores"].get("Manual")
-
-    def __str__(self) -> str:
-        return f"{self.subject_id}"
 
     def _read_raw_data(self, data_type: DataType) -> np.ndarray:
         return self.data_frame.loc[data_type.index, "SignalData"][
@@ -99,9 +99,8 @@ class WearanizePlus(Dataset):
         recording_file_pattern: str,
         hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hynogram_mapping"],
     ) -> None:
-        self.data_dir = Path(data_dir)
+        super().__init__(data_dir, hypnogram_mapping)
         self._recording_file_pattern = recording_file_pattern
-        self.hypnogram_mapping = hypnogram_mapping
 
     def get_recordings(
         self, with_sleep_scoring: bool = True

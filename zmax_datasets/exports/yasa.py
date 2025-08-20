@@ -16,7 +16,7 @@ from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
 from zmax_datasets.sources.zmax.enums import DataTypes
 from zmax_datasets.utils.exceptions import (
-    ChannelLengthMismatchError,
+    ChannelDurationMismatchError,
     HypnogramMismatchError,
     InvalidZMaxDataTypeError,
     MissingDataTypeError,
@@ -69,7 +69,7 @@ class YasaExportStrategy(ExportStrategy):
         eog_channel: str | None = None,
         sampling_frequency: int = settings.YASA["sampling_frequency"],
         test_split_size: float = 0.2,
-        existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
+        existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
     ):
         super().__init__(
@@ -87,8 +87,6 @@ class YasaExportStrategy(ExportStrategy):
         eog_data_type = DataTypes.get_by_channel(eog_channel) if eog_channel else None
 
         if eeg_data_type is None or eeg_data_type not in eeg_data_types:
-            print("hi")
-            print(eeg_data_type)
             raise InvalidZMaxDataTypeError(
                 f"{eeg_channel} is not a valid ZMax EEG channel."
                 " Valid channels are:"
@@ -125,7 +123,7 @@ class YasaExportStrategy(ExportStrategy):
 
     def _load_existing_data(self, file_path: Path) -> pd.DataFrame:
         if file_path.exists():
-            if self.existing_file_handling == ExistingFileHandling.RAISE_ERROR:
+            if self.existing_file_handling == ExistingFileHandling.RAISE:
                 raise FileExistsError(f"File {file_path} already exists.")
 
             logger.info(f"File {file_path} already exists.")
@@ -169,7 +167,7 @@ class YasaExportStrategy(ExportStrategy):
                 SleepScoringReadError,
                 FileNotFoundError,
                 HypnogramMismatchError,
-                ChannelLengthMismatchError,
+                ChannelDurationMismatchError,
             ) as e:
                 self._handle_error(e, f"Skipping recording {recording}")
 
@@ -205,7 +203,7 @@ class YasaExportStrategy(ExportStrategy):
         eog_data, _ = raw_eog[:]
 
         if len(eeg_data) != len(eog_data):
-            raise ChannelLengthMismatchError(
+            raise ChannelDurationMismatchError(
                 "EEG and EOG channels have different lengths."
                 f" EEG: {len(eeg_data)}, EOG: {len(eog_data)}"
             )

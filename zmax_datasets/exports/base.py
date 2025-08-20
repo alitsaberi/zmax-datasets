@@ -10,7 +10,7 @@ from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
 class ExportStrategy(ABC):
     def __init__(
         self,
-        existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
+        existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
     ):
         self.existing_file_handling = existing_file_handling

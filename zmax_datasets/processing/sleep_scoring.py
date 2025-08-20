@@ -55,8 +55,8 @@ class UTimeModel:
         self._model = None
         self._hyperparameters = None
         self._dataset = None
-        self._resample = Resample()
         self.load()
+        self._resample = Resample(self.input_sample_rate)
 
     def __repr__(self) -> str:
         return (

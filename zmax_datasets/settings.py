@@ -28,6 +28,7 @@ DEFAULTS = {
         3: "N3",
         4: "REM",
         -1: "UNKNOWN",
+        -2: "ARTIFACT",
     },
     "hypnogram_reverse_mapping": {
         "W": 0,
@@ -36,6 +37,7 @@ DEFAULTS = {
         "N3": 3,
         "REM": 4,
         "UNKNOWN": -1,
+        "ARTIFACT": -2,
     },
 }
 
@@ -64,6 +66,7 @@ USLEEP = {
     "sampling_frequency": 128.0,
     "data_types_file_extension": "h5",
     "hypnogram_file_extension": "ids",
+    "catalog_file": "catalog.csv",
 }
 
 ############################# ZMax ##############################
