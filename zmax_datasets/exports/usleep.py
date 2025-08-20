@@ -2,22 +2,27 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pandas as pd
 from loguru import logger
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import (
     Dataset,
-    DataTypeMapping,
     Recording,
-    SleepAnnotations,
 )
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
+from zmax_datasets.exports.utils import DataTypeMapping, SleepAnnotations
+from zmax_datasets.transforms.resample import Resample
+from zmax_datasets.utils.data import Data
 from zmax_datasets.utils.exceptions import (
+    ChannelDurationMismatchError,
     MissingDataTypeError,
+    RawDataReadError,
+    SleepScoringFileNotFoundError,
+    SleepScoringFileNotSet,
     SleepScoringReadError,
 )
-from zmax_datasets.utils.helpers import remove_tree
 
 
 def ndarray_to_ids_format(
@@ -45,41 +50,75 @@ class USleepExportStrategy(ExportStrategy):
     def __init__(
         self,
         data_type_mappings: list[DataTypeMapping],
-        sampling_frequency: int = settings.USLEEP["sampling_frequency"],
-        annotation_type: SleepAnnotations = SleepAnnotations.SLEEP_STAGE,
-        existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE_ERROR,
-        missing_data_type_handling: ErrorHandling = ErrorHandling.RAISE,
+        sample_rate: float | None = None,
+        annotation_type: SleepAnnotations | None = None,
+        existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE,
+        data_type_error_handling: ErrorHandling = ErrorHandling.RAISE,
+        annotation_error_handling: ErrorHandling = ErrorHandling.RAISE,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
     ):
         super().__init__(
             existing_file_handling=existing_file_handling, error_handling=error_handling
         )
-        self.missing_data_type_handling = missing_data_type_handling
         self.data_type_mappings = data_type_mappings
-        self.sampling_frequency = sampling_frequency
+        self.sample_rate = sample_rate
         self.annotation_type = annotation_type
+        self.data_type_error_handling = data_type_error_handling
+        self.annotation_error_handling = annotation_error_handling
+        self._resample = Resample(sample_rate) if sample_rate is not None else None
 
     def _export(self, dataset: Dataset, out_dir: Path) -> None:
         prepared_recordings = 0
-        for i, recording in enumerate(dataset.get_recordings(with_sleep_scoring=True)):
+        catalog_data = []
+
+        for i, recording in enumerate(dataset.get_recordings(with_sleep_scoring=False)):
             logger.info(f"-> Recording {i+1}: {recording}")
 
             recording_out_dir = out_dir / str(recording)
             recording_out_dir.mkdir(parents=True, exist_ok=True)
 
+            # Initialize record info for catalog
+            record_info = {
+                "recording_id": str(recording),
+                "has_annotations": False,
+                # Will be updated to 'success' if export succeeds
+                "export_status": "failed",
+                **{
+                    data_type_mapping.output_label: False
+                    for data_type_mapping in self.data_type_mappings
+                },
+                **{f"{label}_count": 0 for label in dataset.hypnogram_mapping.values()},
+            }
+
             try:
-                self._extract_data_types(recording, recording_out_dir)
-                self._extract_hypnogram(
-                    recording, recording_out_dir, dataset.hypnogram_mapping
-                )
+                # Extract and catalog data types
+                data_info = self._extract_data_types(recording, recording_out_dir)
+                record_info.update(data_info)
+
+                # Extract and catalog annotations
+                if self.annotation_type is not None:
+                    annotation_info = self._extract_hypnogram(
+                        recording, recording_out_dir, dataset.hypnogram_mapping
+                    )
+                    record_info.update(annotation_info)
+
+                record_info["export_status"] = "success"
                 prepared_recordings += 1
             except (
                 MissingDataTypeError,
+                RawDataReadError,
                 SleepScoringReadError,
+                SleepScoringFileNotFoundError,
+                SleepScoringFileNotSet,
+                ChannelDurationMismatchError,
                 FileExistsError,
-                FileNotFoundError,
             ) as e:
-                self._handle_error(e, recording, recording_out_dir)
+                self._handle_error(e, recording)
+                record_info["error_message"] = str(e)
+
+            catalog_data.append(record_info)
+
+        self._create_catalog(catalog_data, out_dir)
 
         logger.info(f"Prepared {prepared_recordings} recordings for USleep")
 
@@ -87,90 +126,165 @@ class USleepExportStrategy(ExportStrategy):
         self,
         recording: Recording,
         recording_out_dir: Path,
-    ) -> None:
+    ) -> dict:
         logger.info("Extracting data types...")
 
         out_file_path = (
             recording_out_dir
             / f"{recording}.{settings.USLEEP['data_types_file_extension']}"
         )
-        self._check_existing_file(out_file_path)
 
+        data_types_info = {}
         index = 0
+        extracted_data_types = []
+        expected_duration = None
+
+        if not self._handle_existing_file(out_file_path):
+            return data_types_info
+
         with h5py.File(out_file_path, "w") as out_file:
             out_file.create_group("channels")
             for data_type_mapping in self.data_type_mappings:
+                data_type_name = data_type_mapping.output_label
+                data_types_info[f"{data_type_name}"] = False
+
+                if self._resample is not None:
+                    data_type_mapping.transforms.append(self._resample)
+
                 try:
-                    data = data_type_mapping.map(recording, self.sampling_frequency)
-                except MissingDataTypeError as e:
-                    if self.missing_data_type_handling == ErrorHandling.SKIP:
+                    data = data_type_mapping.map(recording)
+                except (MissingDataTypeError, RawDataReadError) as e:
+                    if self.data_type_error_handling == ErrorHandling.SKIP:
                         logger.warning(
-                            f"Skipping data type {data_type_mapping.output_label} for"
-                            f" recording {recording} because {e}"
+                            f"Skipping {data_type_name} for recording {recording} "
+                            f"because: {str(e)}"
                         )
                         continue
-
                     raise e
 
-                self._write_data_to_hdf5(
-                    out_file, data_type_mapping.output_label, data, index
-                )
+                # Validate length
+                if expected_duration is None:
+                    expected_duration = data.duration
+                    data_types_info["length"] = str(data.length)
+                    data_types_info["duration"] = str(expected_duration)
+
+                elif data.duration != expected_duration:
+                    raise ChannelDurationMismatchError(
+                        f"Data type {data_type_name} has duration {data.duration}, "
+                        f"expected {expected_duration}"
+                    )
+
+                self._write_data_to_hdf5(out_file, data_type_name, data, index)
+                extracted_data_types.append(data_type_name)
+
+                data_types_info[f"{data_type_name}"] = True
+
                 index += 1
 
-            if index == 0:
-                raise MissingDataTypeError(
-                    f"No data types found for recording {recording}"
-                )
+            logger.info(
+                f"Extracted {len(extracted_data_types)} data types for recording "
+                f"{recording}: {', '.join(extracted_data_types)}"
+            )
 
-            out_file.attrs["sample_rate"] = self.sampling_frequency
+            if self.sample_rate is not None:
+                out_file.attrs["sample_rate"] = self.sample_rate
+
+        return data_types_info
 
     def _write_data_to_hdf5(
-        self, out_file: h5py.File, data_type_name: str, data: np.ndarray, index: int
+        self, out_file: h5py.File, data_type_name: str, data: Data, index: int
     ) -> None:
         dataset = out_file["channels"].create_dataset(
             data_type_name,
-            data=data,
+            data=data.array.squeeze(),
             chunks=True,
             compression="gzip",
         )
         dataset.attrs["channel_index"] = index
+        dataset.attrs["sample_rate"] = data.sample_rate
 
     def _extract_hypnogram(
         self,
         recording: Recording,
         recording_out_dir: Path,
         label_mapping: dict[int, str],
-    ) -> None:
+    ) -> dict:
         logger.info("Extracting hypnogram...")
 
         out_file_path = (
             recording_out_dir
             / f"{recording}.{settings.USLEEP['hypnogram_file_extension']}"
         )
-        self._check_existing_file(out_file_path)
 
-        annotations = recording.read_annotations(
-            annotation_type=self.annotation_type, label_mapping=label_mapping
-        )
+        if not self._handle_existing_file(out_file_path):
+            return {"has_annotations": True}
 
-        initials, durations, annotations = ndarray_to_ids_format(annotations)
-        initials, durations, annotations = squeeze_ids(initials, durations, annotations)
+        annotation_info = {"has_annotations": False}
 
-        with open(out_file_path, "w") as out_file:
-            for i, d, s in zip(initials, durations, annotations, strict=False):
-                out_file.write(f"{int(i)},{int(d)},{s}\n")
+        try:
+            annotations = recording.read_annotations(
+                annotation_type=self.annotation_type, label_mapping=label_mapping
+            )
+            annotation_info["has_annotations"] = True
 
-    def _check_existing_file(self, file_path: Path) -> None:
-        if (
-            file_path.exists()
-            and self.existing_file_handling == ExistingFileHandling.RAISE_ERROR
-        ):
-            raise FileExistsError(f"File {file_path} already exists.")
+            # Add annotation stats
+            unique_labels = np.unique(annotations)
+            for label in unique_labels:
+                label_count = np.sum(annotations == label)
+                annotation_info[f"{label}_count"] = int(label_count)
+
+            # Write to file
+            initials, durations, annotations = ndarray_to_ids_format(annotations)
+            initials, durations, annotations = squeeze_ids(
+                initials, durations, annotations
+            )
+
+            with open(out_file_path, "w") as out_file:
+                for i, d, s in zip(initials, durations, annotations, strict=False):
+                    out_file.write(f"{int(i)},{int(d)},{s}\n")
+
+            return annotation_info
+
+        except (
+            SleepScoringReadError,
+            SleepScoringFileNotFoundError,
+            SleepScoringFileNotSet,
+        ) as e:
+            if self.annotation_error_handling == ErrorHandling.SKIP:
+                logger.warning(f"Skipping hypnogram for recording {recording}: {e}")
+                return annotation_info
+            raise e
+
+    def _create_catalog(self, catalog_data: list[dict], out_dir: Path) -> None:
+        catalog_path = out_dir / settings.USLEEP["catalog_file"]
+        df = pd.DataFrame(catalog_data)
+        df.to_csv(catalog_path, index=False)
+        logger.info(f"Dataset catalog saved to {catalog_path}")
+
+    def _handle_existing_file(self, file_path: Path) -> bool:
+        """Handle existing file based on existing_file_handling setting.
+
+        Returns:
+            bool: True if processing should continue, False if it should be skipped
+        """
+        if file_path.exists():
+            message = f"File {file_path} already exists."
+            if self.existing_file_handling == ExistingFileHandling.SKIP:
+                logger.info(f"{message} Skipping...")
+                return False
+            elif self.existing_file_handling == ExistingFileHandling.OVERWRITE:
+                logger.info(f"{message} Overwriting...")
+                file_path.unlink()
+                return True
+            else:
+                raise FileExistsError(message)
+        return True
 
     def _handle_error(
-        self, error: Exception, recording: Recording, recording_out_dir: Path
+        self,
+        error: Exception,
+        recording: Recording,
     ) -> None:
-        remove_tree(recording_out_dir)
         if self.error_handling == ErrorHandling.SKIP:
             logger.warning(f"Skipping recording {recording}: {error}")
         elif self.error_handling == ErrorHandling.RAISE:

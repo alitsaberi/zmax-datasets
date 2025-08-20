@@ -39,6 +39,17 @@ class Recording(BaseRecording):
     # TODO: change sleep_scoring to annotations in all files for consistent naming
     _sleep_scoring_file: Path | None = field(default=None, repr=False, init=False)
 
+    def __str__(self) -> str:
+        string_parts = []
+
+        if self.subject_id is not None:
+            string_parts.append(self.subject_id)
+        if self.session_id is not None:
+            string_parts.append(self.session_id)
+        if not string_parts:
+            string_parts.append(str(self.data_dir.name))
+        return "-".join(string_parts)
+
     @property
     def sleep_scoring_file(self) -> Path | None:
         return self._sleep_scoring_file
@@ -66,6 +77,7 @@ class Recording(BaseRecording):
         )
 
         raw = mne.io.read_raw_edf(file_path, preload=False)
+
         logger.debug(f"Channels: {raw.info['chs']}")
 
         return raw.get_data().squeeze()
@@ -119,11 +131,10 @@ class Dataset(BaseDataset, ABC):
         sleep_scoring_file_pattern: str | None = None,
         hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hynogram_mapping"],
     ):
-        self.data_dir = Path(data_dir)
+        super().__init__(data_dir, hypnogram_mapping)
         self._zmax_dir_pattern = zmax_dir_pattern
         self._sleep_scoring_dir = Path(sleep_scoring_dir) if sleep_scoring_dir else None
         self._sleep_scoring_file_pattern = sleep_scoring_file_pattern
-        self.hypnogram_mapping = hypnogram_mapping
 
     def get_recordings(
         self, with_sleep_scoring: bool = False
@@ -138,7 +149,9 @@ class Dataset(BaseDataset, ABC):
             yield recording
 
     def _zmax_dir_generator(self) -> Generator[Path, None, None]:
-        yield from self.data_dir.glob(self._zmax_dir_pattern)
+        for zmax_dir in self.data_dir.glob(self._zmax_dir_pattern):
+            if zmax_dir.is_dir():
+                yield zmax_dir
 
     @classmethod
     @abstractmethod
@@ -159,7 +172,9 @@ class Dataset(BaseDataset, ABC):
     def _create_recording(
         self, subject_id: str, session_id: str, zmax_dir: Path
     ) -> Recording:
-        recording = Recording(subject_id, session_id, zmax_dir)
+        recording = Recording(
+            data_dir=zmax_dir, subject_id=subject_id, session_id=session_id
+        )
         try:
             recording.sleep_scoring_file = self._get_sleep_scoring_file(recording)
         except (

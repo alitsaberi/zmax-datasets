@@ -12,7 +12,7 @@ from loguru import logger
 class NoSamplesError(ValueError): ...
 
 
-def _validate_channel_names(objects: Sequence["ArrayBase"]) -> None:
+def _validate_channel_names_match(objects: Sequence["ArrayBase"]) -> list[str]:
     reference_channels = objects[0].channel_names
     for obj in objects[1:]:
         if obj.channel_names != reference_channels:
@@ -21,6 +21,42 @@ def _validate_channel_names(objects: Sequence["ArrayBase"]) -> None:
                 f" Reference: {reference_channels}, got: {obj.channel_names}"
             )
     return reference_channels
+
+
+def _validate_channel_names_distinct(objects: Sequence["ArrayBase"]) -> list[str]:
+    channel_names = set()
+    for obj in objects:
+        obj_channels = set(obj.channel_names)
+        if intersection := channel_names & obj_channels:
+            raise ValueError(
+                "Channel names must be distinct."
+                f" Duplicate channels found: {intersection}"
+            )
+        channel_names.update(obj_channels)
+
+    return list(channel_names)
+
+
+def _validate_timestamps_match(objects: Sequence["TimestampedArray"]) -> np.ndarray:
+    reference_timestamps = objects[0].timestamps
+    for obj in objects[1:]:
+        if not np.array_equal(obj.timestamps, reference_timestamps):
+            raise ValueError(
+                "All objects must have identical timestamps."
+                f" Reference: {reference_timestamps}, got: {obj.timestamps}"
+            )
+    return reference_timestamps
+
+
+def _validate_sample_rate_match(objects: Sequence["Data"]) -> float:
+    reference_sample_rate = objects[0].sample_rate
+    for obj in objects[1:]:
+        if obj.sample_rate != reference_sample_rate:
+            raise ValueError(
+                "All objects must have identical sample rates."
+                f" Reference: {reference_sample_rate}, got: {obj.sample_rate}"
+            )
+    return reference_sample_rate
 
 
 @dataclass
@@ -83,6 +119,66 @@ class ArrayBase:
             f.write(",".join(self.channel_names) + "\n")
             for row in self.array:
                 f.write(",".join(map(str, row)) + "\n")
+
+    @classmethod
+    def concatenate(
+        cls,
+        objects: Sequence["ArrayBase"],
+    ) -> "ArrayBase":
+        """Concatenate multiple arrays along the time axis (vertically).
+
+        All input arrays must have the same number and names of channels.
+
+        Args:
+            objects: Sequence of ArrayBase objects to concatenate
+
+        Returns:
+            A new ArrayBase object with arrays concatenated along time axis
+
+        Raises:
+            ValueError: If input arrays have different channels or
+                less than two objects are provided.
+        """
+        if len(objects) < 2:
+            raise ValueError("At least two objects must be provided.")
+
+        # Validate channel names match
+        channel_names = _validate_channel_names_match(objects)
+
+        # Concatenate arrays along time axis
+        array = np.concatenate([obj.array for obj in objects], axis=0)
+
+        return cls(
+            array=array,
+            channel_names=channel_names,
+        )
+
+    @classmethod
+    def stack_channels(cls, objects: Sequence["ArrayBase"]) -> "ArrayBase":
+        """Stack multiple arrays by concatenating their channels horizontally.
+
+        All input arrays must have the same length (number of samples).
+
+        Args:
+            objects: Sequence of ArrayBase objects to stack
+
+        Returns:
+            A new ArrayBase object with arrays stacked along channel axis
+
+        Raises:
+            ValueError: If input arrays have different lengths or no objects
+                provided
+        """
+        if len(objects) < 2:
+            raise ValueError("At least two objects must be provided.")
+
+        channel_names = _validate_channel_names_distinct(objects)
+        array = np.concatenate([obj.array for obj in objects], axis=1)
+
+        return cls(
+            array=array,
+            channel_names=channel_names,
+        )
 
 
 @dataclass
@@ -254,14 +350,30 @@ class TimestampedArray(ArrayBase):
 
     @classmethod
     def concatenate(cls, objects: Sequence["TimestampedArray"]) -> "TimestampedArray":
-        if len(objects) == 0:
-            raise ValueError("At least one object must be provided.")
+        base = super().concatenate(objects)
 
-        channel_names = _validate_channel_names(objects)
-        array = np.concatenate([obj.array for obj in objects], axis=0)
         timestamps = np.concatenate([obj.timestamps for obj in objects])
-        return TimestampedArray(
-            array=array, channel_names=channel_names, timestamps=timestamps
+        # TODO: check if timestamps are sorted
+
+        return cls(
+            array=base.array,
+            channel_names=base.channel_names,
+            timestamps=timestamps,
+        )
+
+    @classmethod
+    def stack_channels(
+        cls,
+        objects: Sequence["TimestampedArray"],
+    ) -> "TimestampedArray":
+        base = super().stack_channels(objects)
+
+        timestamps = _validate_timestamps_match(objects)
+
+        return cls(
+            array=base.array,
+            channel_names=base.channel_names,
+            timestamps=timestamps,
         )
 
     def slice_by_time(
@@ -349,9 +461,23 @@ class Data(TimestampedArray):
     ) -> "Data":
         base = super().concatenate(objects)
 
-        sample_rate = objects[0].sample_rate
-        if not all(obj.sample_rate == sample_rate for obj in objects):
-            raise ValueError("All objects must have the same sample rate")
+        sample_rate = _validate_sample_rate_match(objects)
+
+        return Data(
+            array=base.array,
+            channel_names=base.channel_names,
+            timestamps=base.timestamps,
+            sample_rate=sample_rate,
+        )
+
+    @classmethod
+    def stack_channels(
+        cls,
+        objects: Sequence["Data"],
+    ) -> "Data":
+        base = super().stack_channels(objects)
+
+        sample_rate = _validate_sample_rate_match(objects)
 
         return Data(
             array=base.array,
@@ -375,7 +501,7 @@ def samples_to_timestamped_array(samples: Sequence[Sample]) -> TimestampedArray:
     if len(samples) == 0:
         raise NoSamplesError("No samples provided")
 
-    channels_names = _validate_channel_names(samples)
+    channels_names = _validate_channel_names_match(samples)
 
     array = np.stack([sample.array for sample in samples])
     timestamps = np.array([sample.timestamp for sample in samples], dtype=np.int64)

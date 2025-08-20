@@ -13,7 +13,7 @@ def test_yasa_export_strategy_initialization():
         eog_channel=eog_channel,
         sampling_frequency=sampling_frequency,
         test_split_size=test_split_size,
-        existing_file_handling=ExistingFileHandling.RAISE_ERROR,
+        existing_file_handling=ExistingFileHandling.RAISE,
         error_handling=ErrorHandling.RAISE,
     )
 
@@ -21,5 +21,5 @@ def test_yasa_export_strategy_initialization():
     assert strategy.eog_channel == eog_channel
     assert strategy.sampling_frequency == sampling_frequency
     assert strategy.test_split_size == test_split_size
-    assert strategy.existing_file_handling == ExistingFileHandling.RAISE_ERROR
+    assert strategy.existing_file_handling == ExistingFileHandling.RAISE
     assert strategy.error_handling == ErrorHandling.RAISE

@@ -1,22 +1,16 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator
-from dataclasses import dataclass, field
-from enum import Enum
+from collections.abc import Generator
 from functools import cached_property
-from typing import Any
+from pathlib import Path
 
 import numpy as np
 from loguru import logger
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.utils import mapper
-from zmax_datasets.utils.data import DataType
-from zmax_datasets.utils.exceptions import MissingDataTypeError
-
-
-class SleepAnnotations(Enum):
-    SLEEP_STAGE = "sleep_stage"
-    AROUSAL = "arousal"
+from zmax_datasets.exports.utils import SleepAnnotations
+from zmax_datasets.utils.data import Data, DataType
+from zmax_datasets.utils.exceptions import MissingDataTypeError, RawDataReadError
 
 
 class Recording(ABC):
@@ -29,14 +23,24 @@ class Recording(ABC):
         data_type_label: str,
     ) -> tuple[np.ndarray, float]:
         logger.info(f"Extracting {data_type_label}")
+
         if data_type_label not in self.data_types:
             raise MissingDataTypeError(
                 f"Data type {data_type_label} not found in {self}"
             )
 
         data_type = self.data_types[data_type_label]
-        data = self._read_raw_data(data_type)
-        return data, data_type.sampling_rate  # TODO: return Data object
+        try:
+            array = self._read_raw_data(data_type)
+        except Exception as e:
+            raise RawDataReadError(
+                f"Failed to read raw data from {data_type}: {e}"
+            ) from e
+        return Data(
+            array=array.reshape(-1, 1),
+            sample_rate=data_type.sampling_rate,
+            channel_names=[data_type.channel],
+        )
 
     @abstractmethod
     def _read_raw_data(self, data_type: DataType) -> np.ndarray: ...
@@ -50,51 +54,19 @@ class Recording(ABC):
     ) -> np.ndarray: ...
 
 
-@dataclass
-class DataTypeMapping:
-    output_label: str
-    input_data_types: list[str]
-    transforms: list[
-        Callable[[np.ndarray], np.ndarray]
-        | tuple[Callable[[np.ndarray], np.ndarray], dict[str, Any]]
-    ] = field(default_factory=list)
-
-    def map(self, recording: Recording) -> np.ndarray:
-        data = self._get_raw_data(recording)
-        logger.debug(f"Raw data shape: {data.shape}")
-        data = self._transform_data(data)
-        logger.debug(f"Processed data shape: {data.shape}")
-        return data
-
-    def _get_raw_data(
-        self,
-        recording: Recording,
-    ) -> np.ndarray:
-        data_list = []
-
-        for data_type_label in self.input_data_types:
-            data, _ = recording.read_raw_data(data_type_label)
-            data_list.append(data)
-
-        return np.vstack(data_list) if len(data_list) > 1 else data_list[0]
-
-    def _transform_data(
-        self,
-        data: np.ndarray,
-    ) -> np.ndarray:
-        for transform in self.transforms:
-            if isinstance(transform, tuple):
-                data = transform[0](data, **transform[1])
-            else:
-                data = transform(data)
-
-        return data
-
-
 class Dataset(ABC):
+    def __init__(
+        self,
+        data_dir: Path | str,
+        hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hynogram_mapping"],
+    ):
+        self.data_dir = Path(data_dir)
+        self.hypnogram_mapping = hypnogram_mapping
+
     @abstractmethod
     def get_recordings(
-        self, with_sleep_scoring: bool = False
+        self,
+        with_sleep_scoring: bool = False,  # TODO: rename to with_annotations
     ) -> Generator[Recording, None, None]: ...
 
 

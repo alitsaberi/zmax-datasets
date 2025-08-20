@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Optional
 
 from zmax_datasets import settings
 from zmax_datasets.utils.data import DataType
@@ -32,7 +33,7 @@ class DataTypes(Enum):  # TODO: rename to DataType and make DataType class Chann
         return self.value.channel
 
     @classmethod
-    def get_by_channel(cls, channel: str) -> "DataTypes" | None:
+    def get_by_channel(cls, channel: str) -> Optional["DataTypes"]:
         for data_type in cls:
             if data_type.channel == channel:
                 return data_type
