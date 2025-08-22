@@ -71,6 +71,7 @@ def parse_arguments():
         type=str,
         help="Annotation to export",
         choices=[annotation.name for annotation in SleepAnnotations],
+        default=None,
     )
     parser.add_argument(
         "--skip-missing-data-types",
@@ -158,7 +159,9 @@ def main() -> None:
         export_strategy = USleepExportStrategy(
             data_type_mappings=data_mappings,
             sample_rate=args.sample_rate,
-            annotation_type=SleepAnnotations[args.annotation],
+            annotation_type=SleepAnnotations[args.annotation]
+            if args.annotation
+            else None,
             existing_file_handling=existing_file_handling,
             data_type_error_handling=data_type_error_handling,
             annotation_error_handling=annotation_error_handling,
