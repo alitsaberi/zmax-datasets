@@ -35,3 +35,9 @@ class HypnogramMismatchError(ZMaxDatasetError):
             f" {features_length} and {hypnogram_length}"
         )
         super().__init__(self.message)
+
+
+class RecordingNotFoundError(ZMaxDatasetError): ...
+
+
+class SampleRateNotFoundError(ZMaxDatasetError): ...

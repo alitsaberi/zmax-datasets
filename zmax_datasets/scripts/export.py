@@ -1,12 +1,12 @@
 import argparse
 from pathlib import Path
-from typing import Annotated, Any
 
 from loguru import logger
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, TypeAdapter
+from pydantic import TypeAdapter
 
-from zmax_datasets import datasets, settings
+from zmax_datasets import settings
 from zmax_datasets.datasets.base import Dataset
+from zmax_datasets.datasets.configs import DatasetConfig
 from zmax_datasets.exports.usleep import (
     ErrorHandling,
     ExistingFileHandling,
@@ -15,25 +15,10 @@ from zmax_datasets.exports.usleep import (
 from zmax_datasets.exports.utils import DataTypeMapping, SleepAnnotations
 from zmax_datasets.settings import LOGS_DIR
 from zmax_datasets.utils.helpers import (
-    create_class_by_name_resolver,
     generate_timestamped_file_name,
     load_yaml_config,
 )
 from zmax_datasets.utils.logger import setup_logging
-
-
-class DatasetConfig(BaseModel):
-    name: str
-    dataset: Annotated[
-        type[Dataset],
-        BeforeValidator(create_class_by_name_resolver(datasets, Dataset)),
-    ] = Field(..., alias="class_name")
-    config: dict[str, Any] = Field(default_factory=dict)
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    def configure(self) -> "Dataset":
-        return self.dataset(**self.config)
 
 
 def parse_arguments():

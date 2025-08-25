@@ -11,6 +11,36 @@ MAX_DIFF_THRESHOLD = 300  # ms
 MIN_UNIQUE_VALUES = 3
 
 
+def extract_ibi_from_peaks(
+    peaks: np.ndarray, sample_rate: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Extract IBI from binary peaks signal.
+
+    Args:
+        peaks: Binary signal where 1 indicates peaks and 0 indicates non-peaks
+        sample_rate: Signal sampling rate in Hz
+
+    Returns:
+        np.ndarray: Inter-beat intervals in milliseconds
+    """
+    if peaks.ndim != 1:
+        raise ValueError("Peaks signal must be a 1D array.")
+
+    # Find indices where peaks occur (where signal is 1)
+    peak_indices = np.where(peaks == 1)[0]
+
+    if len(peak_indices) < 2:
+        logger.warning("Not enough peaks to calculate IBI.")
+        return np.array([])
+
+    # Calculate time differences between consecutive peaks in milliseconds
+    ibi = np.diff(peak_indices) * (1000 / sample_rate)
+    ibi_times = peak_indices[1:] / sample_rate
+
+    return ibi, ibi_times
+
+
 def detect_rr(signal, sample_rate, **kwargs):
     try:
         wd, _ = hp.process(signal, sample_rate, high_precision=True, **kwargs)

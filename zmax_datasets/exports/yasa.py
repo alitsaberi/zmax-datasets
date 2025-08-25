@@ -220,7 +220,7 @@ class YasaExportStrategy(ExportStrategy):
         return mne.io.RawArray(combined_data, combined_info)
 
     def _read_raw_data(self, recording: Recording, data_type: str) -> mne.io.Raw:
-        raw = recording.read_raw_data(data_type)
+        raw = recording.read_data_type(data_type)
         raw.resample(self.sampling_frequency, npad="auto")
         return raw
 

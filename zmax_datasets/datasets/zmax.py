@@ -19,7 +19,6 @@ from zmax_datasets.datasets.base import (
 from zmax_datasets.datasets.base import (
     Recording as BaseRecording,
 )
-from zmax_datasets.datasets.utils import mapper
 from zmax_datasets.sources.zmax.enums import DataTypes
 from zmax_datasets.utils.exceptions import (
     MultipleSleepScoringFilesFoundError,
@@ -39,7 +38,8 @@ class Recording(BaseRecording):
     # TODO: change sleep_scoring to annotations in all files for consistent naming
     _sleep_scoring_file: Path | None = field(default=None, repr=False, init=False)
 
-    def __str__(self) -> str:
+    @property
+    def id(self) -> str:
         string_parts = []
 
         if self.subject_id is not None:
@@ -82,7 +82,14 @@ class Recording(BaseRecording):
 
         return raw.get_data().squeeze()
 
-    def read_sleep_scoring(self) -> pd.DataFrame:
+    def _read_annotations(
+        self,
+        annotation_type: SleepAnnotations,
+        default_label: str,
+    ) -> np.ndarray:
+        return self._read_sleep_scoring()[annotation_type.value].values.squeeze()
+
+    def _read_sleep_scoring(self) -> pd.DataFrame:
         if self._sleep_scoring_file is None:
             raise SleepScoringFileNotSet(
                 f"The sleep scoring file is not set for recording {self}"
@@ -107,20 +114,6 @@ class Recording(BaseRecording):
             f" with default separators {_SLEEP_SCORING_FILE_SEPARATORS}"
         )
 
-    def read_annotations(
-        self,
-        annotation_type: SleepAnnotations = SleepAnnotations.SLEEP_STAGE,
-        label_mapping: dict[int, str] | None = None,
-        default_label: str = settings.DEFAULTS["label"],
-    ) -> np.ndarray:
-        annotations = self.read_sleep_scoring()[annotation_type.value].values.squeeze()
-        logger.debug(f"{annotation_type.value} annotations shape: {annotations.shape}")
-
-        if label_mapping is not None:
-            annotations = mapper(label_mapping)(annotations, default_label)
-
-        return annotations
-
 
 class Dataset(BaseDataset, ABC):
     def __init__(
@@ -131,10 +124,10 @@ class Dataset(BaseDataset, ABC):
         sleep_scoring_file_pattern: str | None = None,
         hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hynogram_mapping"],
     ):
-        super().__init__(data_dir, hypnogram_mapping)
         self._zmax_dir_pattern = zmax_dir_pattern
         self._sleep_scoring_dir = Path(sleep_scoring_dir) if sleep_scoring_dir else None
         self._sleep_scoring_file_pattern = sleep_scoring_file_pattern
+        super().__init__(data_dir, hypnogram_mapping)
 
     def get_recordings(
         self, with_sleep_scoring: bool = False
