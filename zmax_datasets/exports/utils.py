@@ -37,7 +37,7 @@ class DataTypeMapping:
         data_list = []
 
         for data_type_label in self.input_data_types:
-            data = recording.read_raw_data(data_type_label)
+            data = recording.read_data_type(data_type_label)
             data_list.append(data)
 
         return Data.stack_channels(data_list) if len(data_list) > 1 else data_list[0]

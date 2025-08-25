@@ -99,8 +99,8 @@ class WearanizePlus(Dataset):
         recording_file_pattern: str,
         hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hynogram_mapping"],
     ) -> None:
-        super().__init__(data_dir, hypnogram_mapping)
         self._recording_file_pattern = recording_file_pattern
+        super().__init__(data_dir, hypnogram_mapping)
 
     def get_recordings(
         self, with_sleep_scoring: bool = True

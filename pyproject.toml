@@ -34,6 +34,7 @@ utime = {git = "https://github.com/alitsaberi/U-Time.git", optional = true}
 tensorflow = {version = ">=2.10.0,<2.11", optional = true, markers = "sys_platform != 'darwin'"}
 tensorflow-macos = {version = ">=2.10.0,<2.11", optional = true, platform = "darwin"}
 psg-utils = {version = "^0.1.6", optional = true}
+neurokit2 = "^0.2.12"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.5.7"
@@ -50,6 +51,7 @@ sleep_scoring = ["tensorflow-io-gcs-filesystem", "tensorflow-addons", "utime", "
 
 [tool.poetry.scripts]
 export = "zmax_datasets.scripts.export:main"
+process = "zmax_datasets.scripts.process:main"
 export-artifact = "zmax_datasets.scripts.export_artifact:main"
 export-ibi = "zmax_datasets.scripts.export_ibi:main"
 sleep-scoring = "zmax_datasets.scripts.sleep_scoring:main"

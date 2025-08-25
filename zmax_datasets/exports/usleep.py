@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import h5py
 import numpy as np
@@ -6,19 +7,25 @@ import pandas as pd
 from loguru import logger
 
 from zmax_datasets import settings
+from zmax_datasets.pipeline.engine import execute_pipeline
+
+if TYPE_CHECKING:
+    from zmax_datasets.pipeline.configs import PipelineConfig
+
 from zmax_datasets.datasets.base import (
     Dataset,
     Recording,
 )
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
-from zmax_datasets.exports.utils import DataTypeMapping, SleepAnnotations
+from zmax_datasets.exports.utils import SleepAnnotations
 from zmax_datasets.transforms.resample import Resample
 from zmax_datasets.utils.data import Data
 from zmax_datasets.utils.exceptions import (
     ChannelDurationMismatchError,
     MissingDataTypeError,
     RawDataReadError,
+    SampleRateNotFoundError,
     SleepScoringFileNotFoundError,
     SleepScoringFileNotSet,
     SleepScoringReadError,
@@ -49,61 +56,94 @@ def squeeze_ids(
 class USleepExportStrategy(ExportStrategy):
     def __init__(
         self,
-        data_type_mappings: list[DataTypeMapping],
+        input_data_types: list[str] | None = None,
+        output_data_types: list[str] | None = None,
+        pipeline_config: "PipelineConfig | None" = None,
         sample_rate: float | None = None,
         annotation_type: SleepAnnotations | None = None,
         existing_file_handling: ExistingFileHandling = ExistingFileHandling.RAISE,
         data_type_error_handling: ErrorHandling = ErrorHandling.RAISE,
         annotation_error_handling: ErrorHandling = ErrorHandling.RAISE,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
+        with_sleep_scoring: bool = False,
     ):
         super().__init__(
             existing_file_handling=existing_file_handling, error_handling=error_handling
         )
-        self.data_type_mappings = data_type_mappings
+
+        self.input_data_types = input_data_types
+        self.output_data_types = output_data_types
+        self.pipeline_config = pipeline_config
         self.sample_rate = sample_rate
         self.annotation_type = annotation_type
         self.data_type_error_handling = data_type_error_handling
         self.annotation_error_handling = annotation_error_handling
         self._resample = Resample(sample_rate) if sample_rate is not None else None
+        self.with_sleep_scoring = with_sleep_scoring
+
+    def _get_processed_recordings(self, out_dir: Path) -> set[str]:
+        """Get set of recording IDs that were successfully processed."""
+        catalog_path = out_dir / settings.USLEEP["catalog_file"]
+        if not catalog_path.exists():
+            return set()
+
+        df = pd.read_csv(catalog_path)
+        processed = df["recording_id"].tolist()
+        logger.info(f"Found {len(processed)} processed recordings in catalog")
+        return set(processed)
 
     def _export(self, dataset: Dataset, out_dir: Path) -> None:
-        prepared_recordings = 0
-        catalog_data = []
+        # Read successful recordings once at the start
+        processed_recordings = self._get_processed_recordings(out_dir)
+        n_new_processed_recordings = 0
 
-        for i, recording in enumerate(dataset.get_recordings(with_sleep_scoring=False)):
+        for i, recording in enumerate(
+            dataset.get_recordings(with_sleep_scoring=self.with_sleep_scoring)
+        ):
             logger.info(f"-> Recording {i+1}: {recording}")
+            recording_id = str(recording)
 
-            recording_out_dir = out_dir / str(recording)
-            recording_out_dir.mkdir(parents=True, exist_ok=True)
+            # Skip if already successfully processed
+            if recording_id in processed_recordings:
+                logger.info(f"Skipping recording {recording_id} -" " already processed")
+                continue
+
+            # Set up recording directory
+            out_dir_path = out_dir / recording_id
+            out_dir_path.mkdir(parents=True, exist_ok=True)
 
             # Initialize record info for catalog
             record_info = {
-                "recording_id": str(recording),
+                "recording_id": recording_id,
                 "has_annotations": False,
-                # Will be updated to 'success' if export succeeds
                 "export_status": "failed",
-                **{
-                    data_type_mapping.output_label: False
-                    for data_type_mapping in self.data_type_mappings
-                },
-                **{f"{label}_count": 0 for label in dataset.hypnogram_mapping.values()},
+                **{data_type: False for data_type in self.output_data_types},
             }
 
-            try:
-                # Extract and catalog data types
-                data_info = self._extract_data_types(recording, recording_out_dir)
-                record_info.update(data_info)
+            # Only add label counts if annotation_type is set
+            if self.annotation_type is not None:
+                annotation_mapping = (
+                    dataset.hypnogram_mapping or settings.DEFAULTS["hynogram_mapping"]
+                )
+                record_info.update(
+                    {f"{label}_count": 0 for label in annotation_mapping.values()}
+                )
 
+            try:
                 # Extract and catalog annotations
                 if self.annotation_type is not None:
                     annotation_info = self._extract_hypnogram(
-                        recording, recording_out_dir, dataset.hypnogram_mapping
+                        recording, out_dir_path, dataset.hypnogram_mapping
                     )
                     record_info.update(annotation_info)
 
+                # Extract and catalog data types
+                data_info = self._extract_data_types(recording, out_dir_path)
+                record_info.update(data_info)
+
                 record_info["export_status"] = "success"
-                prepared_recordings += 1
+                n_new_processed_recordings += 1
+
             except (
                 MissingDataTypeError,
                 RawDataReadError,
@@ -111,16 +151,16 @@ class USleepExportStrategy(ExportStrategy):
                 SleepScoringFileNotFoundError,
                 SleepScoringFileNotSet,
                 ChannelDurationMismatchError,
+                SampleRateNotFoundError,
                 FileExistsError,
             ) as e:
                 self._handle_error(e, recording)
                 record_info["error_message"] = str(e)
 
-            catalog_data.append(record_info)
+            # Update catalog after each recording
+            self._update_catalog(record_info, out_dir)
 
-        self._create_catalog(catalog_data, out_dir)
-
-        logger.info(f"Prepared {prepared_recordings} recordings for USleep")
+        logger.info(f"Prepared {n_new_processed_recordings} recordings.")
 
     def _extract_data_types(
         self,
@@ -134,51 +174,67 @@ class USleepExportStrategy(ExportStrategy):
             / f"{recording}.{settings.USLEEP['data_types_file_extension']}"
         )
 
+        if not self._handle_existing_file(out_file_path):
+            return {}
+
+        initial_data = recording.read_data_types(self.input_data_types)
+        logger.info(f"Read initial data types: {list(initial_data.keys())}")
+
+        # Execute pipeline if provided
+        processed_data = execute_pipeline(
+            pipeline_config=self.pipeline_config,
+            initial_data=initial_data,
+            output_data_types=None,  # Get all pipeline outputs
+        )
+        logger.info(f"Pipeline produced data types: {list(processed_data.keys())}")
+
+        # Apply resampling if specified
+        if self._resample:
+            for data_type in processed_data:
+                processed_data[data_type] = self._resample(processed_data[data_type])
+
+        # Write outputs to h5 file
         data_types_info = {}
-        index = 0
         extracted_data_types = []
         expected_duration = None
-
-        if not self._handle_existing_file(out_file_path):
-            return data_types_info
+        index = 0
 
         with h5py.File(out_file_path, "w") as out_file:
             out_file.create_group("channels")
-            for data_type_mapping in self.data_type_mappings:
-                data_type_name = data_type_mapping.output_label
-                data_types_info[f"{data_type_name}"] = False
 
-                if self._resample is not None:
-                    data_type_mapping.transforms.append(self._resample)
+            for data_type in self.output_data_types:
+                data_types_info[data_type] = False
 
-                try:
-                    data = data_type_mapping.map(recording)
-                except (MissingDataTypeError, RawDataReadError) as e:
+                if data_type not in processed_data:
                     if self.data_type_error_handling == ErrorHandling.SKIP:
-                        logger.warning(
-                            f"Skipping {data_type_name} for recording {recording} "
-                            f"because: {str(e)}"
-                        )
+                        logger.warning(f"Skipping missing data type: {data_type}")
                         continue
-                    raise e
+                    else:
+                        raise MissingDataTypeError(
+                            f"Data type {data_type} not found in output"
+                        )
 
-                # Validate length
+                data = processed_data[data_type]
+
+                # Validate length consistency
                 if expected_duration is None:
                     expected_duration = data.duration
                     data_types_info["length"] = str(data.length)
                     data_types_info["duration"] = str(expected_duration)
-
                 elif data.duration != expected_duration:
                     raise ChannelDurationMismatchError(
-                        f"Data type {data_type_name} has duration {data.duration}, "
+                        f"Data type {data_type} has duration {data.duration}, "
                         f"expected {expected_duration}"
                     )
 
-                self._write_data_to_hdf5(out_file, data_type_name, data, index)
-                extracted_data_types.append(data_type_name)
+                # Calculate and store channel statistics as separate columns
+                channel_stats = self._calculate_channel_stats(data)
+                for stat_name, stat_value in channel_stats.items():
+                    data_types_info[f"{data_type}_{stat_name}"] = stat_value
 
-                data_types_info[f"{data_type_name}"] = True
-
+                self._write_data_to_hdf5(out_file, data_type, data, index)
+                extracted_data_types.append(data_type)
+                data_types_info[data_type] = True
                 index += 1
 
             logger.info(
@@ -190,6 +246,16 @@ class USleepExportStrategy(ExportStrategy):
                 out_file.attrs["sample_rate"] = self.sample_rate
 
         return data_types_info
+
+    def _calculate_channel_stats(self, data: Data) -> dict:
+        """Calculate basic statistics for a channel."""
+        array = data.array.squeeze()
+        return {
+            "min": float(np.min(array)),
+            "max": float(np.max(array)),
+            "mean": float(np.mean(array)),
+            "std": float(np.std(array)),
+        }
 
     def _write_data_to_hdf5(
         self, out_file: h5py.File, data_type_name: str, data: Data, index: int
@@ -255,11 +321,24 @@ class USleepExportStrategy(ExportStrategy):
                 return annotation_info
             raise e
 
-    def _create_catalog(self, catalog_data: list[dict], out_dir: Path) -> None:
+    def _update_catalog(self, record_info: dict, out_dir: Path) -> None:
+        """Update catalog with new record info."""
         catalog_path = out_dir / settings.USLEEP["catalog_file"]
-        df = pd.DataFrame(catalog_data)
+
+        # Read existing catalog if it exists
+        if catalog_path.exists():
+            df = pd.read_csv(catalog_path)
+            # Update or append record
+            idx = df[df["recording_id"] == record_info["recording_id"]].index
+            if len(idx) > 0:
+                df.loc[idx[0]] = pd.Series(record_info)
+            else:
+                df = pd.concat([df, pd.DataFrame([record_info])], ignore_index=True)
+        else:
+            df = pd.DataFrame([record_info])
+
         df.to_csv(catalog_path, index=False)
-        logger.info(f"Dataset catalog saved to {catalog_path}")
+        logger.info(f"Updated catalog at {catalog_path}")
 
     def _handle_existing_file(self, file_path: Path) -> bool:
         """Handle existing file based on existing_file_handling setting.

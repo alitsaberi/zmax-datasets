@@ -8,7 +8,7 @@ from zmax_datasets.utils.data import Data
 
 
 def _read_data_type(recording: Recording, data_type: DataTypes) -> np.ndarray:
-    data, _ = recording.read_raw_data(data_type.channel)
+    data, _ = recording.read_data_type(data_type.channel)
     if data_type.category == "EEG":
         data = data * 1_000_000  # Convert to microvolts
     return data

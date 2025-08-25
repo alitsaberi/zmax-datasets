@@ -5,7 +5,8 @@ from pathlib import Path
 PACKAGE_DIR = Path(__file__).resolve().parent
 BASE_DIR = PACKAGE_DIR.parent
 CONFIG_DIR = BASE_DIR / "configs"
-DATASETS_CONFIG_FILE = CONFIG_DIR / "datasets.yaml"
+# TODO: should be removed later when the scripts are all have a config file argument
+DATASETS_CONFIG_FILE = CONFIG_DIR / "raw_datasets.yaml"
 DATA_DIR = BASE_DIR / "data"
 LOGS_DIR = BASE_DIR / "logs"
 RESOURCES_DIR = BASE_DIR / "resources"
