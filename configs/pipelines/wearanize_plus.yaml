@@ -1,0 +1,6 @@
+name: zmax_datasets
+description: "Extract and rename data types from wearanize+ dataset"
+
+steps:
+  - input_data_types: ["Zmax-EEGL", "Zmax-EEGR", "Zmax-ACCX", "Zmax-ACCY", "Zmax-ACCZ", "Zmax-NOISE", "Zmax-OXY_IR_AC", "Emp-ACCX", "Emp-ACCY", "Emp-ACCZ", "Emp-EDA", "Emp-BVP", "Emp-TEMP", "Emp-HR", "ActivPal-ACCX", "ActivPal-ACCY", "ActivPal-ACCZ"]
+    output_data_types: ["EEG_LEFT", "EEG_RIGHT", "ACCELEROMETER_X", "ACCELEROMETER_Y", "ACCELEROMETER_Z", "NOISE", "PPG", "EMP_ACCELEROMETER_X", "EMP_ACCELEROMETER_Y", "EMP_ACCELEROMETER_Z", "EMP_EDA", "EMP_BVP", "EMP_BODY_TEMP", "EMP_HEART_RATE", "ACTIVPAL_ACCELEROMETER_X", "ACTIVPAL_ACCELEROMETER_Y", "ACTIVPAL_ACCELEROMETER_Z"]
