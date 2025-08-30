@@ -76,7 +76,7 @@ def parse_arguments():
         "--annotation",
         type=SleepAnnotations,
         help="Annotation type to export",
-        choices=[annotation.value for annotation in SleepAnnotations],
+        choices=list(SleepAnnotations),
         default=None,
     )
 
