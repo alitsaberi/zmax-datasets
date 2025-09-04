@@ -153,6 +153,7 @@ class USleepExportStrategy(ExportStrategy):
                 ChannelDurationMismatchError,
                 SampleRateNotFoundError,
                 FileExistsError,
+                FileNotFoundError,
             ) as e:
                 self._handle_error(e, recording)
                 record_info["error_message"] = str(e)
@@ -177,21 +178,22 @@ class USleepExportStrategy(ExportStrategy):
         if not self._handle_existing_file(out_file_path):
             return {}
 
-        initial_data = recording.read_data_types(self.input_data_types)
-        logger.info(f"Read initial data types: {list(initial_data.keys())}")
+        data_types = recording.read_data_types(self.input_data_types)
+        logger.info(f"Read initial data types: {list(data_types.keys())}")
 
         # Execute pipeline if provided
-        processed_data = execute_pipeline(
-            pipeline_config=self.pipeline_config,
-            initial_data=initial_data,
-            output_data_types=None,  # Get all pipeline outputs
-        )
-        logger.info(f"Pipeline produced data types: {list(processed_data.keys())}")
+        if self.pipeline_config:
+            data_types = execute_pipeline(
+                pipeline_config=self.pipeline_config,
+                initial_data=data_types,
+                output_data_types=None,  # Get all pipeline outputs
+            )
+            logger.info(f"Pipeline produced data types: {list(data_types.keys())}")
 
         # Apply resampling if specified
         if self._resample:
-            for data_type in processed_data:
-                processed_data[data_type] = self._resample(processed_data[data_type])
+            for data_type in data_types:
+                data_types[data_type] = self._resample(data_types[data_type])
 
         # Write outputs to h5 file
         data_types_info = {}
@@ -205,7 +207,7 @@ class USleepExportStrategy(ExportStrategy):
             for data_type in self.output_data_types:
                 data_types_info[data_type] = False
 
-                if data_type not in processed_data:
+                if data_type not in data_types:
                     if self.data_type_error_handling == ErrorHandling.SKIP:
                         logger.warning(f"Skipping missing data type: {data_type}")
                         continue
@@ -214,7 +216,7 @@ class USleepExportStrategy(ExportStrategy):
                             f"Data type {data_type} not found in output"
                         )
 
-                data = processed_data[data_type]
+                data = data_types[data_type]
 
                 # Validate length consistency
                 if expected_duration is None:
