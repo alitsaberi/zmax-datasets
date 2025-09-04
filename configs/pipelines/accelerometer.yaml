@@ -1,0 +1,23 @@
+name: accelerometer_processing
+description: "Accelerometer processing pipeline"
+
+steps:
+  - input_data_types: ["ACCELEROMETER_X", "ACCELEROMETER_Y", "ACCELEROMETER_Z"]
+    output_data_types: ["ACCELEROMETER_X_resampled", "ACCELEROMETER_Y_resampled", "ACCELEROMETER_Z_resampled"]
+    transforms:
+      - transform: Resample
+        config:
+          new_sample_rate: 128.0
+
+  - input_data_types: ["ACCELEROMETER_X_resampled", "ACCELEROMETER_Y_resampled", "ACCELEROMETER_Z_resampled"]
+    output_data_types: ["ACCELEROMETER_X_filtered", "ACCELEROMETER_Y_filtered", "ACCELEROMETER_Z_filtered"]
+    transforms:
+      - transform: FIRFilter
+        config:
+          low_cutoff: 0.25
+          high_cutoff: 15.0
+  
+  - input_data_types: ["ACCELEROMETER_X_filtered", "ACCELEROMETER_Y_filtered", "ACCELEROMETER_Z_filtered"]
+    output_data_types: ["ACCELEROMETER_magnitude", "ACCELEROMETER_magnitude_derivative"]
+    transforms:
+      - transform: ProcessAccelerometer
