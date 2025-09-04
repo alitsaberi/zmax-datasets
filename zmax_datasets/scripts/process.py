@@ -48,7 +48,6 @@ def parse_arguments():
         "--pipeline",
         type=Path,
         help="Pipeline configuration file (YAML)",
-        required=True,
     )
     parser.add_argument(
         "--input-data-types",
@@ -193,14 +192,16 @@ def print_processing_summary(
     print("\n" + "=" * 60)
     print("PROCESSING SUMMARY")
     print("=" * 60)
-    print(f"Pipeline: {pipeline_config.name}")
-    print(f"Description: {pipeline_config.description}")
-    print(f"Steps: {len(pipeline_config.steps)}")
+    print(f"Pipeline: {pipeline_config.name}") if pipeline_config else "None"
 
-    for i, step in enumerate(pipeline_config.steps, 1):
-        print(f"  {i}. {step.input_data_types} → {step.output_data_types}")
-        if step.transforms:
-            print(f"     Transforms: {len(step.transforms)}")
+    if pipeline_config:
+        print(f"Description: {pipeline_config.description}")
+        print(f"Steps: {len(pipeline_config.steps)}")
+
+        for i, step in enumerate(pipeline_config.steps, 1):
+            print(f"  {i}. {step.input_data_types} → {step.output_data_types}")
+            if step.transforms:
+                print(f"     Transforms: {len(step.transforms)}")
 
     print(f"\nInput data types: {args.input_data_types}")
     print(f"Output data types: {args.output_data_types}")
@@ -234,7 +235,9 @@ def main() -> None:
         logger.info(f"Loaded {len(datasets)} datasets")
 
         # Load pipeline configuration
-        pipeline_config = _load_pipeline_config(args.pipeline)
+        pipeline_config = (
+            _load_pipeline_config(args.pipeline) if args.pipeline else None
+        )
 
         # Print summary
         print_processing_summary(args, datasets, pipeline_config)

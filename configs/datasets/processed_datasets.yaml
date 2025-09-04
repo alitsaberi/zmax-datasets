@@ -1,0 +1,24 @@
+- name: donders_2022
+  dataset_type: USleepDataset
+  config:
+    data_dir: /project/4180000.46/zmax_datasets/processed/donders_2022
+    
+- name: qs
+  dataset_type: USleepDataset
+  config:
+    data_dir: /project/4180000.46/zmax_datasets/processed/qs
+    
+- name: donders_2018
+  dataset_type: USleepDataset
+  config:
+    data_dir: /project/4180000.46/zmax_datasets/processed/donders_2018
+
+- name: karolinska
+  dataset_type: USleepDataset
+  config:
+    data_dir: /project/4180000.46/zmax_datasets/processed/karolinska
+
+- name: wearanize_plus
+  dataset_type: USleepDataset
+  config:
+    data_dir: /project/4180000.46/zmax_datasets/processed/wearanize_plus
