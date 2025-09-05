@@ -67,7 +67,6 @@ USLEEP = {
     "sampling_frequency": 128.0,
     "data_types_file_extension": "h5",
     "hypnogram_file_extension": "ids",
-    "catalog_file": "catalog.csv",
 }
 
 ############################# ZMax ##############################
