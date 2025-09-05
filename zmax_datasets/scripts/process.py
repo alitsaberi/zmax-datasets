@@ -5,7 +5,7 @@ from loguru import logger
 
 from zmax_datasets.datasets.base import Dataset
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
-from zmax_datasets.exports.usleep import USleepExportStrategy
+from zmax_datasets.exports.usleep import CATALOG_FILE_NAME, USleepExportStrategy
 from zmax_datasets.exports.utils import SleepAnnotations
 from zmax_datasets.pipeline.configs import PipelineConfig
 from zmax_datasets.scripts.export import DatasetConfig
@@ -78,9 +78,12 @@ def parse_arguments():
         choices=list(SleepAnnotations),
         default=None,
     )
-
     parser.add_argument(
-        "--overwrite", action="store_true", help="Overwrite existing files"
+        "--existing-file-handling",
+        type=ExistingFileHandling,
+        help="Existing file handling",
+        choices=list(ExistingFileHandling),
+        default=ExistingFileHandling.RAISE,
     )
     parser.add_argument(
         "--skip-data-type-on-error",
@@ -101,6 +104,12 @@ def parse_arguments():
         "--only-with-sleep-scoring",
         action="store_true",
         help="Only process recordings with sleep scoring",
+    )
+    parser.add_argument(
+        "--catalog-file-name",
+        type=str,
+        help="Catalog file name",
+        default=CATALOG_FILE_NAME,
     )
 
     return parser.parse_args()
@@ -164,9 +173,6 @@ def _create_export_strategy(
         ErrorHandling.SKIP if args.skip_annotation_on_error else ErrorHandling.RAISE
     )
     error_handling = ErrorHandling.SKIP if args.skip_on_error else ErrorHandling.RAISE
-    existing_file_handling = (
-        ExistingFileHandling.OVERWRITE if args.overwrite else ExistingFileHandling.RAISE
-    )
 
     # Create export strategy
     export_strategy = USleepExportStrategy(
@@ -175,11 +181,12 @@ def _create_export_strategy(
         pipeline_config=pipeline_config,
         sample_rate=args.sample_rate,
         annotation_type=args.annotation,
-        existing_file_handling=existing_file_handling,
+        existing_file_handling=args.existing_file_handling,
         data_type_error_handling=data_type_error_handling,
         annotation_error_handling=annotation_error_handling,
         error_handling=error_handling,
         with_sleep_scoring=args.only_with_sleep_scoring,
+        catalog_file_name=args.catalog_file_name,
     )
 
     return export_strategy

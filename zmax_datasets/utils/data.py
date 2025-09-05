@@ -475,14 +475,18 @@ class Data(TimestampedArray):
         cls,
         objects: Sequence["Data"],
     ) -> "Data":
-        base = super().stack_channels(objects)
+        if len(objects) < 2:
+            raise ValueError("At least two objects must be provided.")
 
+        channel_names = _validate_channel_names_distinct(objects)
+        timestamps = _validate_timestamps_match(objects)
         sample_rate = _validate_sample_rate_match(objects)
+        array = np.concatenate([obj.array for obj in objects], axis=1)
 
         return Data(
-            array=base.array,
-            channel_names=base.channel_names,
-            timestamps=base.timestamps,
+            array=array,
+            channel_names=channel_names,
+            timestamps=timestamps,
             sample_rate=sample_rate,
         )
 

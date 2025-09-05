@@ -31,6 +31,9 @@ from zmax_datasets.utils.exceptions import (
     SleepScoringReadError,
 )
 
+CATALOG_FILE_NAME = "catalog"
+CATALOG_FILE_EXTENSION = "csv"
+
 
 def ndarray_to_ids_format(
     stages: np.ndarray, period_length: int = settings.DEFAULTS["period_length"]
@@ -53,6 +56,31 @@ def squeeze_ids(
     return squeezed_initials, squeezed_durations, squeezed_annotations
 
 
+def _handle_existing_file(
+    file_path: Path, existing_file_handling: ExistingFileHandling
+) -> bool:
+    """Handle existing file based on existing_file_handling setting.
+
+    Returns:
+        bool: True if processing should continue, False if it should be skipped
+    """
+    if file_path.exists():
+        message = f"File {file_path} already exists."
+        if existing_file_handling == ExistingFileHandling.SKIP:
+            logger.info(f"{message} Skipping...")
+            return False
+        elif existing_file_handling == ExistingFileHandling.OVERWRITE:
+            logger.info(f"{message} Overwriting...")
+            file_path.unlink()
+            return True
+        elif existing_file_handling == ExistingFileHandling.APPEND:
+            logger.info(f"{message} Appending...")
+            return True
+        else:
+            raise FileExistsError(message)
+    return True
+
+
 class USleepExportStrategy(ExportStrategy):
     def __init__(
         self,
@@ -66,6 +94,7 @@ class USleepExportStrategy(ExportStrategy):
         annotation_error_handling: ErrorHandling = ErrorHandling.RAISE,
         error_handling: ErrorHandling = ErrorHandling.RAISE,
         with_sleep_scoring: bool = False,
+        catalog_file_name: str = CATALOG_FILE_NAME,
     ):
         super().__init__(
             existing_file_handling=existing_file_handling, error_handling=error_handling
@@ -76,6 +105,13 @@ class USleepExportStrategy(ExportStrategy):
         self.pipeline_config = pipeline_config
         self.sample_rate = sample_rate
         self.annotation_type = annotation_type
+        self.catalog_file_name = f"{catalog_file_name}.{CATALOG_FILE_EXTENSION}"
+        self.existing_data_file_handling = self.existing_file_handling
+        self.existing_annotation_file_handling = (
+            self.existing_file_handling
+            if self.existing_file_handling != ExistingFileHandling.APPEND
+            else self.existing_file_handling.OVERWRITE
+        )
         self.data_type_error_handling = data_type_error_handling
         self.annotation_error_handling = annotation_error_handling
         self._resample = Resample(sample_rate) if sample_rate is not None else None
@@ -83,7 +119,7 @@ class USleepExportStrategy(ExportStrategy):
 
     def _get_processed_recordings(self, out_dir: Path) -> set[str]:
         """Get set of recording IDs that were successfully processed."""
-        catalog_path = out_dir / settings.USLEEP["catalog_file"]
+        catalog_path = out_dir / self.catalog_file_name
         if not catalog_path.exists():
             return set()
 
@@ -154,6 +190,7 @@ class USleepExportStrategy(ExportStrategy):
                 SampleRateNotFoundError,
                 FileExistsError,
                 FileNotFoundError,
+                ValueError,
             ) as e:
                 self._handle_error(e, recording)
                 record_info["error_message"] = str(e)
@@ -175,8 +212,14 @@ class USleepExportStrategy(ExportStrategy):
             / f"{recording}.{settings.USLEEP['data_types_file_extension']}"
         )
 
-        if not self._handle_existing_file(out_file_path):
+        if not _handle_existing_file(out_file_path, self.existing_data_file_handling):
             return {}
+
+        mode = (
+            "w"
+            if self.existing_data_file_handling == ExistingFileHandling.OVERWRITE
+            else "a"
+        )
 
         data_types = recording.read_data_types(self.input_data_types)
         logger.info(f"Read initial data types: {list(data_types.keys())}")
@@ -199,10 +242,24 @@ class USleepExportStrategy(ExportStrategy):
         data_types_info = {}
         extracted_data_types = []
         expected_duration = None
-        index = 0
 
-        with h5py.File(out_file_path, "w") as out_file:
-            out_file.create_group("channels")
+        with h5py.File(out_file_path, mode) as out_file:
+            # Create channels group if it doesn't exist
+            if "channels" not in out_file:
+                out_file.create_group("channels")
+
+            if (
+                self.sample_rate is not None
+                and out_file.attrs.get("sample_rate") != self.sample_rate
+            ):
+                raise ValueError(
+                    f"Sample rate mismatch:"
+                    f" file has {out_file.attrs.get('sample_rate')} Hz,"
+                    f" but {self.sample_rate} Hz was provided"
+                )
+
+            # Get next channel index for appending
+            index = len(out_file["channels"].keys())
 
             for data_type in self.output_data_types:
                 data_types_info[data_type] = False
@@ -228,6 +285,11 @@ class USleepExportStrategy(ExportStrategy):
                         f"Data type {data_type} has duration {data.duration}, "
                         f"expected {expected_duration}"
                     )
+
+                # If appending, check if channel already exists
+                if data_type in out_file["channels"]:
+                    logger.info(f"Overwriting existing channel: {data_type}")
+                    del out_file["channels"][data_type]
 
                 # Calculate and store channel statistics as separate columns
                 channel_stats = self._calculate_channel_stats(data)
@@ -284,7 +346,9 @@ class USleepExportStrategy(ExportStrategy):
             / f"{recording}.{settings.USLEEP['hypnogram_file_extension']}"
         )
 
-        if not self._handle_existing_file(out_file_path):
+        if not _handle_existing_file(
+            out_file_path, self.existing_annotation_file_handling
+        ):
             return {"has_annotations": True}
 
         annotation_info = {"has_annotations": False}
@@ -325,7 +389,7 @@ class USleepExportStrategy(ExportStrategy):
 
     def _update_catalog(self, record_info: dict, out_dir: Path) -> None:
         """Update catalog with new record info."""
-        catalog_path = out_dir / settings.USLEEP["catalog_file"]
+        catalog_path = out_dir / self.catalog_file_name
 
         # Read existing catalog if it exists
         if catalog_path.exists():
@@ -341,25 +405,6 @@ class USleepExportStrategy(ExportStrategy):
 
         df.to_csv(catalog_path, index=False)
         logger.info(f"Updated catalog at {catalog_path}")
-
-    def _handle_existing_file(self, file_path: Path) -> bool:
-        """Handle existing file based on existing_file_handling setting.
-
-        Returns:
-            bool: True if processing should continue, False if it should be skipped
-        """
-        if file_path.exists():
-            message = f"File {file_path} already exists."
-            if self.existing_file_handling == ExistingFileHandling.SKIP:
-                logger.info(f"{message} Skipping...")
-                return False
-            elif self.existing_file_handling == ExistingFileHandling.OVERWRITE:
-                logger.info(f"{message} Overwriting...")
-                file_path.unlink()
-                return True
-            else:
-                raise FileExistsError(message)
-        return True
 
     def _handle_error(
         self,

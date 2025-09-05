@@ -7,7 +7,7 @@ class ErrorHandling(Enum):
 
 
 class ExistingFileHandling(Enum):
-    RAISE = auto()
-    SKIP = auto()
-    OVERWRITE = auto()
-    APPEND = auto()
+    RAISE = "raise"
+    SKIP = "skip"
+    OVERWRITE = "overwrite"
+    APPEND = "append"
