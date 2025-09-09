@@ -110,7 +110,7 @@ class USleepExportStrategy(ExportStrategy):
         self.existing_annotation_file_handling = (
             self.existing_file_handling
             if self.existing_file_handling != ExistingFileHandling.APPEND
-            else self.existing_file_handling.OVERWRITE
+            else ExistingFileHandling.OVERWRITE
         )
         self.data_type_error_handling = data_type_error_handling
         self.annotation_error_handling = annotation_error_handling
@@ -221,6 +221,15 @@ class USleepExportStrategy(ExportStrategy):
             else "a"
         )
 
+        if self.sample_rate is not None and out_file_path.exists():
+            with h5py.File(out_file_path, "r") as f:
+                if (file_sample_rate := f.attrs.get("sample_rate")) != self.sample_rate:
+                    raise ValueError(
+                        f"Sample rate mismatch:"
+                        f" file has {file_sample_rate} Hz,"
+                        f" but {self.sample_rate} Hz was provided"
+                    )
+
         data_types = recording.read_data_types(self.input_data_types)
         logger.info(f"Read initial data types: {list(data_types.keys())}")
 
@@ -247,16 +256,6 @@ class USleepExportStrategy(ExportStrategy):
             # Create channels group if it doesn't exist
             if "channels" not in out_file:
                 out_file.create_group("channels")
-
-            if (
-                self.sample_rate is not None
-                and out_file.attrs.get("sample_rate") != self.sample_rate
-            ):
-                raise ValueError(
-                    f"Sample rate mismatch:"
-                    f" file has {out_file.attrs.get('sample_rate')} Hz,"
-                    f" but {self.sample_rate} Hz was provided"
-                )
 
             # Get next channel index for appending
             index = len(out_file["channels"].keys())
