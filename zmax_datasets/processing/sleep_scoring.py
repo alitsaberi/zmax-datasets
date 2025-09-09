@@ -222,15 +222,15 @@ class UTimeModel:
 
         data = copy.deepcopy(data)
 
+        if data.sample_rate != self.input_sample_rate:
+            data = self._resample(data)
+
         if (n_samples_dropped := data.length % self.n_samples_per_period) != 0:
             logger.warning(
                 f"Dropping {n_samples_dropped} samples to match model input shape"
                 f" requirement of {self.n_samples_per_period} samples per period."
             )
             data = data[:-n_samples_dropped]
-
-        if data.sample_rate != self.input_sample_rate:
-            data = self._resample(data, self.input_sample_rate)
 
         if quality_control := self.hyperparameters.get("quality_control_func"):
             # Run over epochs and assess if epoch-specific changes should be
