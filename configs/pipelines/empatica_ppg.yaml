@@ -1,0 +1,34 @@
+name: ppg_processing
+description: "PPG processing pipeline to extract peaks, inter-beat intervals, instantaneous heart rate, and signal quality"
+
+steps:
+  - input_data_types: ["EMP_BVP"]
+    output_data_types: ["EMP_BVP_resampled"]
+    transforms:
+      - transform: Resample
+        config:
+          new_sample_rate: 128.0
+
+  - input_data_types: ["EMP_HEART_RATE"]
+    output_data_types: ["EMP_HR_resampled"]
+    transforms:
+      - transform: Resample
+        config:
+          new_sample_rate: 128.0
+
+  - input_data_types: ["EMP_BVP_resampled"]
+    output_data_types: ["EMP_BVP_filtered"]
+    transforms:
+      - transform: FIRFilter
+        config:
+          low_cutoff: 0.5
+          high_cutoff: 8.0
+  
+  - input_data_types: ["EMP_BVP_filtered"]
+    output_data_types: ["EMP_BVP_peaks", "EMP_BVP_ibi", "EMP_BVP_rate", "EMP_BVP_quality"]
+    transforms:
+      - transform: ProcessPPG
+        config:
+          peak_detection_method: charlton
+          quality_method: templatematch
+          correct_artifacts: true
