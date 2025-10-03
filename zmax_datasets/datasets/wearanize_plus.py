@@ -97,7 +97,7 @@ class WearanizePlus(Dataset):
         self,
         data_dir: Path | str,
         recording_file_pattern: str,
-        hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hynogram_mapping"],
+        hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hypnogram_mapping"],
     ) -> None:
         self._recording_file_pattern = recording_file_pattern
         super().__init__(data_dir, hypnogram_mapping)

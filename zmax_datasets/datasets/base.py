@@ -84,11 +84,16 @@ class Recording(ABC):
         annotation_type: SleepAnnotations,
         label_mapping: dict[int, str] | None = None,
         default_label: str = settings.DEFAULTS["label"],
-    ) -> np.ndarray:
+        period_length: float = settings.DEFAULTS["period_length"],
+    ) -> Data:
         annotations = self._read_annotations(annotation_type, default_label)
         if label_mapping is not None:
             annotations = mapper(label_mapping)(annotations, default_label)
-        return annotations
+        return Data(
+            array=annotations.reshape(-1, 1),
+            sample_rate=1 / period_length,
+            channel_names=[annotation_type.value],
+        )
 
     @abstractmethod
     def _read_annotations(self, annotation_type: SleepAnnotations) -> np.ndarray: ...
