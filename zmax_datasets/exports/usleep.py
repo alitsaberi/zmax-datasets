@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import h5py
 import numpy as np
@@ -33,6 +33,7 @@ from zmax_datasets.utils.exceptions import (
 
 CATALOG_FILE_NAME = "catalog"
 CATALOG_FILE_EXTENSION = "csv"
+ANNOTATIONS_DATA_TYPE = "annotations"
 
 
 def ndarray_to_ids_format(
@@ -95,6 +96,7 @@ class USleepExportStrategy(ExportStrategy):
         error_handling: ErrorHandling = ErrorHandling.RAISE,
         with_sleep_scoring: bool = False,
         catalog_file_name: str = CATALOG_FILE_NAME,
+        period_length: int = settings.DEFAULTS["period_length"],
     ):
         super().__init__(
             existing_file_handling=existing_file_handling, error_handling=error_handling
@@ -116,6 +118,15 @@ class USleepExportStrategy(ExportStrategy):
         self.annotation_error_handling = annotation_error_handling
         self._resample = Resample(sample_rate) if sample_rate is not None else None
         self.with_sleep_scoring = with_sleep_scoring
+        self.include_annotations_in_pipeline = False
+
+        if pipeline_config:
+            for step in pipeline_config.steps:
+                if ANNOTATIONS_DATA_TYPE in step.input_data_types:
+                    self.include_annotations_in_pipeline = True
+                    break
+
+        self.period_length = period_length
 
     def _get_processed_recordings(self, out_dir: Path) -> set[str]:
         """Get set of recording IDs that were successfully processed."""
@@ -141,7 +152,7 @@ class USleepExportStrategy(ExportStrategy):
 
             # Skip if already successfully processed
             if recording_id in processed_recordings:
-                logger.info(f"Skipping recording {recording_id} -" " already processed")
+                logger.info(f"Skipping recording {recording_id} - already processed")
                 continue
 
             # Set up recording directory
@@ -158,24 +169,32 @@ class USleepExportStrategy(ExportStrategy):
 
             # Only add label counts if annotation_type is set
             if self.annotation_type is not None:
-                annotation_mapping = (
-                    dataset.hypnogram_mapping or settings.DEFAULTS["hynogram_mapping"]
-                )
-                record_info.update(
-                    {f"{label}_count": 0 for label in annotation_mapping.values()}
-                )
+                # Initialize all possible label counts to 0
+                for label in settings.DEFAULTS["hypnogram_mapping"].values():
+                    record_info[f"{label}_count"] = 0
 
             try:
-                # Extract and catalog annotations
-                if self.annotation_type is not None:
-                    annotation_info = self._extract_hypnogram(
-                        recording, out_dir_path, dataset.hypnogram_mapping
-                    )
-                    record_info.update(annotation_info)
+                # 1. Load data
+                annotations = self._load_annotations(
+                    recording, dataset.hypnogram_mapping
+                )
+                data_types = self._load_data(recording, annotations)
 
-                # Extract and catalog data types
-                data_info = self._extract_data_types(recording, out_dir_path)
+                # 2. Process data
+                data_types = self._process_data(data_types)
+
+                # 3. Export processed data
+                data_info = self._write_data_types(data_types, out_dir_path, recording)
                 record_info.update(data_info)
+
+                # 4. Export annotations
+                if ANNOTATIONS_DATA_TYPE in data_types:
+                    annotations = data_types.pop(ANNOTATIONS_DATA_TYPE)
+
+                annotation_info = self._write_hypnogram(
+                    annotations, out_dir_path, recording, dataset.hypnogram_mapping
+                )
+                record_info.update(annotation_info)
 
                 record_info["export_status"] = "success"
                 n_new_processed_recordings += 1
@@ -200,12 +219,100 @@ class USleepExportStrategy(ExportStrategy):
 
         logger.info(f"Prepared {n_new_processed_recordings} recordings.")
 
-    def _extract_data_types(
+    def _load_annotations(
         self,
         recording: Recording,
+        label_mapping: dict[int, str],
+    ) -> Data | None:
+        """Load annotations from recording.
+
+        Args:
+            recording: Recording to load annotations from
+            label_mapping: Mapping from numeric labels to string labels
+
+        Returns:
+            Annotations Data object or None if not available
+        """
+        if self.annotation_type is not None:
+            try:
+                return recording.read_annotations(
+                    annotation_type=self.annotation_type,
+                    label_mapping=label_mapping,
+                )
+            except (
+                SleepScoringReadError,
+                SleepScoringFileNotFoundError,
+                SleepScoringFileNotSet,
+            ) as e:
+                if self.annotation_error_handling == ErrorHandling.SKIP:
+                    logger.warning(f"Skipping hypnogram for recording {recording}: {e}")
+                else:
+                    raise e
+
+        return None
+
+    def _load_data(
+        self,
+        recording: Recording,
+        annotations: Data | None,
+    ) -> dict[str, Data]:
+        """Load data types and prepare for processing.
+
+        Args:
+            recording: Recording to load data from
+            annotations: Annotations array if available
+
+        Returns:
+            Dictionary of loaded data types
+        """
+        # Load data types
+        data_types = recording.read_data_types(self.input_data_types)
+        logger.info(f"Read initial data types: {list(data_types.keys())}")
+
+        # Add annotations if needed for pipeline
+        if self.include_annotations_in_pipeline and annotations is not None:
+            data_types[ANNOTATIONS_DATA_TYPE] = annotations
+            logger.info("Added annotations data to data types")
+
+        return data_types
+
+    def _process_data(
+        self,
+        data_types: dict[str, Data],
+    ) -> dict[str, Data]:
+        """Process loaded data types through pipeline and resampling.
+
+        Args:
+            data_types: Dictionary of data types to process
+
+        Returns:
+            Dictionary of processed data types
+        """
+        # Execute pipeline if provided
+        if self.pipeline_config:
+            data_types = execute_pipeline(
+                pipeline_config=self.pipeline_config,
+                initial_data=data_types,
+                output_data_types=None,  # Get all pipeline outputs
+            )
+            logger.info(f"Pipeline produced data types: {list(data_types.keys())}")
+
+        # Apply resampling if specified (skip sleep_stage)
+        if self._resample:
+            for data_type, data in data_types.items():
+                if data_type != ANNOTATIONS_DATA_TYPE:
+                    data_types[data_type] = self._resample(data)
+
+        return data_types
+
+    def _write_data_types(
+        self,
+        data_types: dict[str, Data],
         recording_out_dir: Path,
+        recording: Recording,
     ) -> dict:
-        logger.info("Extracting data types...")
+        """Write data types to HDF5 file."""
+        logger.info("Writing data types...")
 
         out_file_path = (
             recording_out_dir
@@ -229,23 +336,6 @@ class USleepExportStrategy(ExportStrategy):
                         f" file has {file_sample_rate} Hz,"
                         f" but {self.sample_rate} Hz was provided"
                     )
-
-        data_types = recording.read_data_types(self.input_data_types)
-        logger.info(f"Read initial data types: {list(data_types.keys())}")
-
-        # Execute pipeline if provided
-        if self.pipeline_config:
-            data_types = execute_pipeline(
-                pipeline_config=self.pipeline_config,
-                initial_data=data_types,
-                output_data_types=None,  # Get all pipeline outputs
-            )
-            logger.info(f"Pipeline produced data types: {list(data_types.keys())}")
-
-        # Apply resampling if specified
-        if self._resample:
-            for data_type in data_types:
-                data_types[data_type] = self._resample(data_types[data_type])
 
         # Write outputs to h5 file
         data_types_info = {}
@@ -301,14 +391,70 @@ class USleepExportStrategy(ExportStrategy):
                 index += 1
 
             logger.info(
-                f"Extracted {len(extracted_data_types)} data types for recording "
-                f"{recording}: {', '.join(extracted_data_types)}"
+                f"Wrote {len(extracted_data_types)} data types: "
+                f"{', '.join(extracted_data_types)}"
             )
 
             if self.sample_rate is not None:
                 out_file.attrs["sample_rate"] = self.sample_rate
 
         return data_types_info
+
+    def _write_hypnogram(
+        self,
+        annotations: Data | None,
+        recording_out_dir: Path,
+        recording: Recording,
+        label_mapping: dict[int, str] | None = None,
+    ) -> dict[str, Any]:
+        """Write hypnogram to file in IDS format and calculate stats.
+
+        Args:
+            annotations: Annotations Data object or None
+            recording_out_dir: Directory to write hypnogram to
+            recording: Recording being processed
+            label_mapping: Optional mapping from numeric to string labels
+
+        Returns:
+            Dictionary with annotation stats
+        """
+        annotation_info = {"has_annotations": False}
+
+        if annotations is None:
+            return annotation_info
+
+        logger.info("Writing hypnogram...")
+        out_file_path = (
+            recording_out_dir
+            / f"{recording}.{settings.USLEEP['hypnogram_file_extension']}"
+        )
+
+        if not _handle_existing_file(
+            out_file_path, self.existing_annotation_file_handling
+        ):
+            return annotation_info
+
+        # Calculate annotation stats
+        annotation_info["has_annotations"] = True
+        annotations_array = annotations.array.squeeze()
+        # Use default mapping if none provided
+        mapping = label_mapping or settings.DEFAULTS["hypnogram_mapping"]
+        for label in mapping.values():
+            label_count = np.sum(annotations_array == label)
+            annotation_info[f"{label}_count"] = int(label_count)
+
+        # Convert to IDS format and write
+        initials, durations, stages = ndarray_to_ids_format(
+            annotations_array, self.period_length
+        )
+        initials, durations, stages = squeeze_ids(initials, durations, stages)
+
+        with open(out_file_path, "w") as out_file:
+            for i, d, s in zip(initials, durations, stages, strict=False):
+                out_file.write(f"{int(i)},{int(d)},{s}\n")
+
+        logger.info(f"Wrote hypnogram to {out_file_path}")
+        return annotation_info
 
     def _calculate_channel_stats(self, data: Data) -> dict:
         """Calculate basic statistics for a channel."""
@@ -331,60 +477,6 @@ class USleepExportStrategy(ExportStrategy):
         )
         dataset.attrs["channel_index"] = index
         dataset.attrs["sample_rate"] = data.sample_rate
-
-    def _extract_hypnogram(
-        self,
-        recording: Recording,
-        recording_out_dir: Path,
-        label_mapping: dict[int, str],
-    ) -> dict:
-        logger.info("Extracting hypnogram...")
-
-        out_file_path = (
-            recording_out_dir
-            / f"{recording}.{settings.USLEEP['hypnogram_file_extension']}"
-        )
-
-        if not _handle_existing_file(
-            out_file_path, self.existing_annotation_file_handling
-        ):
-            return {"has_annotations": True}
-
-        annotation_info = {"has_annotations": False}
-
-        try:
-            annotations = recording.read_annotations(
-                annotation_type=self.annotation_type, label_mapping=label_mapping
-            )
-            annotation_info["has_annotations"] = True
-
-            # Add annotation stats
-            unique_labels = np.unique(annotations)
-            for label in unique_labels:
-                label_count = np.sum(annotations == label)
-                annotation_info[f"{label}_count"] = int(label_count)
-
-            # Write to file
-            initials, durations, annotations = ndarray_to_ids_format(annotations)
-            initials, durations, annotations = squeeze_ids(
-                initials, durations, annotations
-            )
-
-            with open(out_file_path, "w") as out_file:
-                for i, d, s in zip(initials, durations, annotations, strict=False):
-                    out_file.write(f"{int(i)},{int(d)},{s}\n")
-
-            return annotation_info
-
-        except (
-            SleepScoringReadError,
-            SleepScoringFileNotFoundError,
-            SleepScoringFileNotSet,
-        ) as e:
-            if self.annotation_error_handling == ErrorHandling.SKIP:
-                logger.warning(f"Skipping hypnogram for recording {recording}: {e}")
-                return annotation_info
-            raise e
 
     def _update_catalog(self, record_info: dict, out_dir: Path) -> None:
         """Update catalog with new record info."""

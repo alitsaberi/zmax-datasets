@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 from scipy.signal import resample_poly
 
@@ -14,11 +16,17 @@ class Resample(Transform):
         data: Data,
         **kwargs,
     ) -> Data:
-        return Data(
+        # Calculate resampling factors
+        gcd = math.gcd(int(self.new_sample_rate * 1000), int(data.sample_rate * 1000))
+        up = int(self.new_sample_rate * 1000) // gcd
+        down = int(data.sample_rate * 1000) // gcd
+
+        # Resample using integer factors
+        resampled = Data(
             resample_poly(
                 data.array.astype(np.float64),
-                self.new_sample_rate,
-                data.sample_rate,
+                up,
+                down,
                 axis=0,
                 **kwargs,
             ),
@@ -26,3 +34,5 @@ class Resample(Transform):
             channel_names=data.channel_names,
             timestamp_offset=data.timestamps[0],
         )
+
+        return resampled

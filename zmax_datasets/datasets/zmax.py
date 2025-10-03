@@ -122,7 +122,7 @@ class Dataset(BaseDataset, ABC):
         zmax_dir_pattern: str,
         sleep_scoring_dir: Path | str | None = None,
         sleep_scoring_file_pattern: str | None = None,
-        hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hynogram_mapping"],
+        hypnogram_mapping: dict[int, str] = settings.DEFAULTS["hypnogram_mapping"],
     ):
         self._zmax_dir_pattern = zmax_dir_pattern
         self._sleep_scoring_dir = Path(sleep_scoring_dir) if sleep_scoring_dir else None

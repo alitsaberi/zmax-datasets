@@ -60,8 +60,8 @@ def parse_arguments():
         "--output-data-types",
         nargs="+",
         help="Data types to write to output files",
-        required=True,
         type=str,
+        default=[],
     )
     parser.add_argument(
         "--sample-rate",
