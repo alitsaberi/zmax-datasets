@@ -1,13 +1,50 @@
 import pickle
-from pathlib import Path
+from enum import Enum
 
 import numpy as np
+import requests
 import tsfel
 from joblib import Parallel, delayed
 from loguru import logger
 from scipy.signal import spectrogram
 
 from zmax_datasets.settings import ARTIFACT_DETECTION
+
+
+class Version(Enum):
+    DEFAULT = "default"
+    LITE = "lite"
+    BINARY = "binary"
+
+
+MODEL_NAMES = {
+    Version.DEFAULT: "eegUsability_model_v1.0.pkl",
+    Version.LITE: "eegUsability_model_v0.7_lite.pkl",
+    Version.BINARY: "eegUsability_model_v0.6_binary.pkl",
+}
+
+
+def _get_available_models() -> dict[str, str]:
+    response = requests.get(ARTIFACT_DETECTION["models_info_url"])
+    response.raise_for_status()
+    return response.json()
+
+
+def _download_model(model_name: str) -> None:
+    available_models = _get_available_models()
+    if model_name not in available_models:
+        raise ValueError(
+            f"Model {model_name} not found in available models. "
+            f"Available models: {available_models.keys()}"
+        )
+
+    model_url = available_models[model_name]
+    model_path = ARTIFACT_DETECTION["models_dir"] / model_name
+    response = requests.get(model_url)
+    response.raise_for_status()
+
+    with open(model_path, "wb") as f:
+        f.write(response.content)
 
 
 def _extract_spectrogram_features(data: np.ndarray, sample_rate: int) -> np.ndarray:
@@ -135,8 +172,20 @@ def _create_lite_samples(spectrogram_features: np.ndarray) -> np.ndarray:
     return features_left, features_right
 
 
-def load_model(model_path: Path = ARTIFACT_DETECTION["model_path"]) -> object:
+def load_model(version: Version) -> object:
+    model_name = MODEL_NAMES[version]
+    model_path = ARTIFACT_DETECTION["models_dir"] / model_name
+
+    if not model_path.exists():
+        logger.info(
+            f"Model {model_name} not found in "
+            f"{ARTIFACT_DETECTION['models_dir']}. Downloading..."
+        )
+        _download_model(model_name)
+        logger.info(f"Model {model_name} downloaded to {model_path}")
+
     with open(model_path, "rb") as f:
+        logger.info(f"Loading model {model_name} from {model_path}")
         data = pickle.load(f)
         return data["model"]
 

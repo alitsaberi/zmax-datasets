@@ -98,7 +98,8 @@ YASA = {
 ############################# Artifact Detection ##############################
 
 ARTIFACT_DETECTION = {
-    "model_path": MODELS_DIR / "eegUsability_model_v0.7_lite.pkl",
+    "models_dir": MODELS_DIR / "eeg_usability",
+    "models_info_url": "https://drive.usercontent.google.com/download?id=1f55ko0vH8BUYO9HqAQAVH4iGTu3Xdyf8&export=download&authuser=0",
     "sampling_frequency": 256.0,
     "epoch_duration": 10,
     "n_features": {
