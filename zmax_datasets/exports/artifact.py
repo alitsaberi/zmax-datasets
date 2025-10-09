@@ -79,7 +79,7 @@ class ArtifactExportStrategy(ExportStrategy):
             self.eeg_right_data_type_mapping.map(
                 recording, settings.ARTIFACT_DETECTION["sampling_frequency"]
             )
-            * 1e6  # TODO: Some datasets are not in volts (e.g., wearanize_plusd)
+            * 1e6  # TODO: Some datasets are not in volts (e.g., wearanize_plus)
         )
         movement = self.movement_data_type_mapping.map(
             recording, settings.ARTIFACT_DETECTION["sampling_frequency"]

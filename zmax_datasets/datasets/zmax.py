@@ -85,7 +85,6 @@ class Recording(BaseRecording):
     def _read_annotations(
         self,
         annotation_type: SleepAnnotations,
-        default_label: str,
     ) -> np.ndarray:
         return self._read_sleep_scoring()[annotation_type.value].values.squeeze()
 
