@@ -266,7 +266,18 @@ class USleepExportStrategy(ExportStrategy):
             Dictionary of loaded data types
         """
         # Load data types
-        data_types = recording.read_data_types(self.input_data_types)
+        data_types = {}
+        for label in self.input_data_types:
+            try:
+                data_types[label] = recording.read_data_type(label)
+            except (MissingDataTypeError, RawDataReadError) as e:
+                if self.data_type_error_handling == ErrorHandling.SKIP:
+                    logger.warning(
+                        f"Skipping data type {label} for recording {recording}: {e}"
+                    )
+                else:
+                    raise e
+
         logger.info(f"Read initial data types: {list(data_types.keys())}")
 
         # Add annotations if needed for pipeline
