@@ -8,5 +8,3 @@ steps:
       - transform: Resample
         config:
           new_sample_rate: 128.0
-
-EEG_RIGHT EEG_LEFT ACCELEROMETER_X ACCELEROMETER_Y ACCELEROMETER_Z BODY_TEMP BATTERY NOISE LIGHT PPG

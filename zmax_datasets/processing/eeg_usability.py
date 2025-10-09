@@ -1,5 +1,4 @@
 import pickle
-from enum import Enum
 
 import numpy as np
 import requests
@@ -9,18 +8,12 @@ from loguru import logger
 from scipy.signal import spectrogram
 
 from zmax_datasets.settings import ARTIFACT_DETECTION
-
-
-class Version(Enum):
-    DEFAULT = "default"
-    LITE = "lite"
-    BINARY = "binary"
-
+from zmax_datasets.utils.data import Data
 
 MODEL_NAMES = {
-    Version.DEFAULT: "eegUsability_model_v1.0.pkl",
-    Version.LITE: "eegUsability_model_v0.7_lite.pkl",
-    Version.BINARY: "eegUsability_model_v0.6_binary.pkl",
+    "default": "eegUsability_model_v1.0.pkl",
+    "lite": "eegUsability_model_v0.7_lite.pkl",
+    "binary": "eegUsability_model_v0.6_binary.pkl",
 }
 
 
@@ -172,8 +165,15 @@ def _create_lite_samples(spectrogram_features: np.ndarray) -> np.ndarray:
     return features_left, features_right
 
 
-def load_model(version: Version) -> object:
-    model_name = MODEL_NAMES[version]
+def load_model(version: str = "default") -> object:
+    model_name = MODEL_NAMES.get(version)
+
+    if model_name is None:
+        raise ValueError(
+            f"Model {version} not found in available models. "
+            f"Available models: {MODEL_NAMES.keys()}"
+        )
+
     model_path = ARTIFACT_DETECTION["models_dir"] / model_name
 
     if not model_path.exists():
@@ -191,29 +191,44 @@ def load_model(version: Version) -> object:
 
 
 def get_usability_scores(
-    data: np.ndarray,
-    sample_rate: float,
+    data: Data,
     model: object,
-    eeg_left_channel_index: int = 0,
-    eeg_right_channel_index: int = 1,
-    movement_channel_index: int = 2,
-) -> tuple[np.ndarray, np.ndarray, int]:
-    expected_order = [
-        eeg_left_channel_index,
-        eeg_right_channel_index,
-        movement_channel_index,
-    ]
+    eeg_left_label: str,
+    eeg_right_label: str,
+    movement_label: str,
+) -> tuple[Data, int, int]:
+    """
+    Get usability scores for a given data.
+
+    Args:
+        data: Data object with channels EEG_L, EEG_R, and movement
+        model: Model object
+
+    Returns:
+        usability_scores: Data object of usability scores with shape (n_epochs, 2)
+            columns are left and right channels
+        samples_to_keep: number of samples to keep
+        epoch_length: length of each epoch
+    """
+
+    if data.sample_rate != ARTIFACT_DETECTION["sampling_frequency"]:
+        raise ValueError(
+            f"Data must have a sample rate of"
+            f" {ARTIFACT_DETECTION['sampling_frequency']}"
+        )
+
+    expected_order = [eeg_left_label, eeg_right_label, movement_label]
+
+    if set(expected_order) - set(data.channel_names):
+        raise ValueError(f"Data must have the following channels: {expected_order}")
 
     data = data[:, expected_order]
 
-    epoch_duration = ARTIFACT_DETECTION["epoch_duration"]
-
-    epoch_length = int(epoch_duration * sample_rate)
-    data_length = data.shape[0]
-    n_epochs = data_length // epoch_length
+    epoch_length = int(ARTIFACT_DETECTION["epoch_duration"] * data.sample_rate)
+    n_epochs = data.length // epoch_length
     samples_to_keep = n_epochs * epoch_length
     logger.info(
-        f"Number of samples: {data_length},"
+        f"Number of samples: {data.length},"
         f" Number of epochs: {n_epochs},"
         f" Samples to keep: {samples_to_keep}"
     )
@@ -221,26 +236,30 @@ def get_usability_scores(
     if n_epochs == 0:
         raise ValueError(
             "No epochs found in the data",
+            epoch_length=epoch_length,
+            data_length=data.length,
         )
 
-    if samples_to_keep < data_length:
+    if samples_to_keep < data.length:
         logger.info(
-            f"Dropping {data_length - samples_to_keep}"
+            f"Dropping {data.length - samples_to_keep}"
             f" samples from the end of the data."
         )
         data = data[:samples_to_keep]
 
-    array = data.reshape(n_epochs, epoch_length, -1).transpose(0, 2, 1)
+    array = data.array.reshape(n_epochs, epoch_length, data.n_channels).transpose(
+        0, 2, 1
+    )
 
-    spectrogram_features = _extract_spectrogram_features(array, sample_rate)
+    spectrogram_features = _extract_spectrogram_features(array, data.sample_rate)
 
     logger.debug(f"Model features: {model.num_feature()}")
     if model.num_feature() == ARTIFACT_DETECTION["n_features"]["lite"]:
-        logger.info("Using lite model")
+        logger.info("Using lite set of features: {model.num_feature()}")
         samples_left, samples_right = _create_lite_samples(spectrogram_features)
     else:
-        logger.info("Using full model")
-        tsfel_features = _extract_tsfel_features(array, sample_rate)
+        logger.info(f"Using full set of features: {model.num_feature()}")
+        tsfel_features = _extract_tsfel_features(array, data.sample_rate)
         samples_left, samples_right = _create_samples(
             spectrogram_features, tsfel_features
         )
@@ -260,7 +279,12 @@ def get_usability_scores(
     logger.debug(f"Usability scores shape: {usability_scores.shape}")
 
     return (
-        usability_scores,
-        data,
+        Data(
+            array=usability_scores,
+            sample_rate=1.0 / ARTIFACT_DETECTION["epoch_duration"],
+            channel_names=ARTIFACT_DETECTION["channel_names"],
+            timestamp_offset=np.mean(data.timestamps[:epoch_length]),
+        ),
+        samples_to_keep,
         epoch_length,
     )

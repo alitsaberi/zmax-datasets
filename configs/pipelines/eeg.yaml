@@ -1,0 +1,31 @@
+name: eeg_processing
+description: "EEG processing pipeline"
+
+steps:
+  - input_data_types: ["ACCELEROMETER_X", "ACCELEROMETER_Y", "ACCELEROMETER_Z"]
+    output_data_types: ["ACCELEROMETER_magnitude", "ACCELEROMETER_magnitude_derivative"]
+    transforms:
+      - transform: ProcessDynamicAccelerometer
+
+  - input_data_types: ["EEG_LEFT", "EEG_RIGHT", "ACCELEROMETER_magnitude"]
+    output_data_types: ["EEG_LEFT_artifact", "EEG_RIGHT_artifact", "EEG_LEFT", "EEG_RIGHT", "ACCELEROMETER_magnitude"]
+    transforms:
+      - transform: EEGUsability
+        config:
+          model_version: binary
+          return_data: true
+
+  - input_data_types: ["EEG_LEFT", "EEG_RIGHT", "EEG_LEFT_artifact", "EEG_RIGHT_artifact"]
+    output_data_types: ["EEG_LEFT", "EEG_RIGHT", "EEG_LEFT_artifact", "EEG_RIGHT_artifact"]
+    transforms:
+      - transform: Resample
+        config:
+          new_sample_rate: 128.0
+
+  - input_data_types: ["EEG_LEFT", "EEG_RIGHT"]
+    output_data_types: ["EEG_LEFT", "EEG_RIGHT"]
+    transforms:
+      - transform: FIRFilter
+        config:
+          low_cutoff: 0.3
+          high_cutoff: 30.0

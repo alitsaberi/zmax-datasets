@@ -107,6 +107,7 @@ ARTIFACT_DETECTION = {
         "lite": 2838,
     },
     "labels_file_extension": "csv",
+    "channel_names": ["usability_left", "usability_right"],
 }
 
 ##################################### IBI #####################################
