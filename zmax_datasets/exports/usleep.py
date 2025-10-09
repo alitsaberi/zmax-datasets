@@ -87,6 +87,7 @@ class USleepExportStrategy(ExportStrategy):
         self,
         input_data_types: list[str] | None = None,
         output_data_types: list[str] | None = None,
+        rename_mapping: dict[str, str] | None = None,
         pipeline_config: "PipelineConfig | None" = None,
         sample_rate: float | None = None,
         annotation_type: SleepAnnotations | None = None,
@@ -104,6 +105,7 @@ class USleepExportStrategy(ExportStrategy):
 
         self.input_data_types = input_data_types
         self.output_data_types = output_data_types
+        self.rename_mapping = rename_mapping or {}
         self.pipeline_config = pipeline_config
         self.sample_rate = sample_rate
         self.annotation_type = annotation_type
@@ -279,6 +281,16 @@ class USleepExportStrategy(ExportStrategy):
                     raise e
 
         logger.info(f"Read initial data types: {list(data_types.keys())}")
+
+        # Apply renaming if specified
+        if self.rename_mapping:
+            renamed_data_types = {}
+            for original_name, data in data_types.items():
+                new_name = self.rename_mapping.get(original_name, original_name)
+                renamed_data_types[new_name] = data
+                if new_name != original_name:
+                    logger.info(f"Renamed data type: {original_name} -> {new_name}")
+            data_types = renamed_data_types
 
         # Add annotations if needed for pipeline
         if self.include_annotations_in_pipeline and annotations is not None:

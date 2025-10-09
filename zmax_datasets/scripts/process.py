@@ -57,6 +57,17 @@ def parse_arguments():
         type=str,
     )
     parser.add_argument(
+        "--rename-input-data-types",
+        nargs="+",
+        help=(
+            "Rename input data types after reading them."
+            " Must have same length as --input-data-types."
+            " If not provided, input data types will not be renamed."
+        ),
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
         "--output-data-types",
         nargs="+",
         help="Data types to write to output files",
@@ -163,7 +174,9 @@ def _load_pipeline_config(pipeline_file: Path) -> PipelineConfig:
 
 
 def _create_export_strategy(
-    pipeline_config: PipelineConfig, args: argparse.Namespace
+    pipeline_config: PipelineConfig,
+    rename_mapping: dict[str, str] | None,
+    args: argparse.Namespace,
 ) -> USleepExportStrategy:
     # Configure error handling
     data_type_error_handling = (
@@ -174,10 +187,10 @@ def _create_export_strategy(
     )
     error_handling = ErrorHandling.SKIP if args.skip_on_error else ErrorHandling.RAISE
 
-    # Create export strategy
     export_strategy = USleepExportStrategy(
         input_data_types=args.input_data_types,
         output_data_types=args.output_data_types,
+        rename_mapping=rename_mapping,
         pipeline_config=pipeline_config,
         sample_rate=args.sample_rate,
         annotation_type=args.annotation,
@@ -192,8 +205,27 @@ def _create_export_strategy(
     return export_strategy
 
 
+def _create_rename_mapping(
+    input_data_types: list[str], rename_input_data_types: list[str] | None
+) -> dict[str, str] | None:
+    if rename_input_data_types is None:
+        return None
+
+    if len(input_data_types) != len(rename_input_data_types):
+        raise ValueError(
+            f"Number of input data types and rename input data types must be the same. "
+            f"Got {len(input_data_types)} input data types and"
+            f" {len(rename_input_data_types)} rename input data types."
+        )
+
+    return dict(zip(input_data_types, rename_input_data_types, strict=True))
+
+
 def print_processing_summary(
-    args, datasets: dict[str, Dataset], pipeline_config: PipelineConfig
+    args,
+    datasets: dict[str, Dataset],
+    pipeline_config: PipelineConfig,
+    rename_mapping: dict[str, str] | None,
 ):
     """Print a summary of what will be processed"""
     print("\n" + "=" * 60)
@@ -211,6 +243,11 @@ def print_processing_summary(
                 print(f"     Transforms: {len(step.transforms)}")
 
     print(f"\nInput data types: {args.input_data_types}")
+    if rename_mapping:
+        print("Rename mapping:")
+        for original, renamed in rename_mapping.items():
+            print(f"  {original} → {renamed}")
+
     print(f"Output data types: {args.output_data_types}")
 
     if args.annotation:
@@ -227,30 +264,29 @@ def print_processing_summary(
 def main() -> None:
     """Main processing function"""
 
-    # Parse arguments
     args = parse_arguments()
 
-    # Setup logging
     log_file = LOGS_DIR / generate_timestamped_file_name(Path(__file__).stem, "log")
     setup_logging(log_file=log_file)
 
     logger.info(f"Starting pipeline processing with arguments: {args}")
 
     try:
-        # Load datasets
         datasets = _load_datasets(args.dataset_config, args.datasets)
         logger.info(f"Loaded {len(datasets)} datasets")
 
-        # Load pipeline configuration
         pipeline_config = (
             _load_pipeline_config(args.pipeline) if args.pipeline else None
         )
 
-        # Print summary
-        print_processing_summary(args, datasets, pipeline_config)
+        rename_mapping = _create_rename_mapping(
+            args.input_data_types, args.rename_input_data_types
+        )
+
+        print_processing_summary(args, datasets, pipeline_config, rename_mapping)
 
         # Create export strategy
-        export_strategy = _create_export_strategy(pipeline_config, args)
+        export_strategy = _create_export_strategy(pipeline_config, rename_mapping, args)
 
         # Process each dataset
         print("\n🚀 Starting processing...")

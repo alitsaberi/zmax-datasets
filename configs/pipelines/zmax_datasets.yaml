@@ -1,7 +1,0 @@
-name: zmax_datasets
-description: "Extract and rename data types from zmax datasets"
-
-steps:
-  - input_data_types: ["EEG R", "EEG L", "dX", "dY", "dZ", "BODY TEMP", "BATT", "NOISE", "LIGHT", "OXY_IR_AC"]
-    output_data_types: ["EEG_RIGHT", "EEG_LEFT", "ACCELEROMETER_X", "ACCELEROMETER_Y", "ACCELEROMETER_Z", "BODY_TEMP", "BATTERY", "NOISE", "LIGHT", "PPG"]
-    
