@@ -19,7 +19,7 @@ from zmax_datasets.datasets.base import (
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
 from zmax_datasets.exports.utils import SleepAnnotations
-from zmax_datasets.transforms.resample import Resample
+from zmax_datasets.transforms.helpers import Resample
 from zmax_datasets.utils.data import Data
 from zmax_datasets.utils.exceptions import (
     ChannelDurationMismatchError,

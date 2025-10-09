@@ -77,3 +77,16 @@ class FIRFilter(Transform):
             channel_names=data.channel_names,
             timestamps=data.timestamps,
         )
+
+
+class Scale(Transform):
+    def __init__(self, scale_factor: float):
+        self.scale_factor = scale_factor
+
+    def __call__(self, data: Data) -> Data:
+        return Data(
+            array=data.array * self.scale_factor,
+            sample_rate=data.sample_rate,
+            channel_names=data.channel_names,
+            timestamps=data.timestamps,
+        )
