@@ -65,7 +65,6 @@ class USleepRecording(Recording):
     def _read_annotations(
         self,
         annotation_type: SleepAnnotations,
-        default_label: str,
     ) -> np.ndarray:
         """Read sleep stage annotations from .ids file."""
         if self._annotation_file is None or not self._annotation_file.exists():
@@ -94,7 +93,7 @@ class USleepRecording(Recording):
         total_length = int(
             (initials[-1] + durations[-1]) / settings.DEFAULTS["period_length"]
         )
-        full_stages = np.full(total_length, default_label, dtype=object)
+        full_stages = np.full(total_length, settings.DEFAULTS["label"], dtype=object)
 
         # Fill in the stages
         for i, d, s in zip(initials, durations, stages, strict=False):

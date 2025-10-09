@@ -6,4 +6,4 @@ __pycache__/
 
 logs/
 data/
-resources/
+resources/models/eeg_usability/
