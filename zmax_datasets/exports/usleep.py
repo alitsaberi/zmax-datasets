@@ -387,10 +387,8 @@ class USleepExportStrategy(ExportStrategy):
 
                 data = data_types[data_type]
 
-                # Validate length consistency
                 if expected_duration is None:
                     expected_duration = data.duration
-                    data_types_info["length"] = str(data.length)
                     data_types_info["duration"] = str(expected_duration)
                 elif data.duration != expected_duration:
                     raise ChannelDurationMismatchError(

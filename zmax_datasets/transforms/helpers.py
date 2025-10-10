@@ -90,3 +90,30 @@ class Scale(Transform):
             channel_names=data.channel_names,
             timestamps=data.timestamps,
         )
+
+
+class TrimToMultiple(Transform):
+    """
+    Trim data to ensure its duration is divisible by a specified duration.
+
+    This trims from the end of the data to make the total duration
+    a multiple of the specified duration.
+
+    Args:
+        duration: Duration in seconds that the total duration should be divisible by.
+
+    Example:
+        If data is 95 seconds long and duration=10, it will be trimmed to 90 seconds.
+    """
+
+    def __init__(self, duration: float):
+        self.duration = duration
+
+    def __call__(self, data: Data) -> Data:
+        total_samples = data.length
+        total_duration = total_samples / data.sample_rate
+
+        target_duration = self.duration * int(total_duration / self.duration)
+        target_samples = int(target_duration * data.sample_rate)
+
+        return data[:target_samples]

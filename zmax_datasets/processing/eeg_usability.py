@@ -14,6 +14,7 @@ MODEL_NAMES = {
     "default": "eegUsability_model_v1.0.pkl",
     "lite": "eegUsability_model_v0.7_lite.pkl",
     "binary": "eegUsability_model_v0.6_binary.pkl",
+    "lite_binary": "eegUsability_model_v0.7.3_lite_binary.pkl",
 }
 
 
@@ -136,6 +137,7 @@ def _create_samples(
     # Stacking Sectrogram and Satistical features side-by-side
     x_test_l = np.hstack((spec_feats_l, stat_feats_usability_l))
     x_test_r = np.hstack((spec_feats_r, stat_feats_usability_r))
+
     return x_test_l, x_test_r
 
 
@@ -201,7 +203,7 @@ def get_usability_scores(
     Get usability scores for a given data.
 
     Args:
-        data: Data object with channels EEG_L, EEG_R, and movement
+        data: Data object with channels EEG_L in uV, EEG_R in uV, and movement
         model: Model object
 
     Returns:
@@ -255,7 +257,7 @@ def get_usability_scores(
 
     logger.debug(f"Model features: {model.num_feature()}")
     if model.num_feature() == ARTIFACT_DETECTION["n_features"]["lite"]:
-        logger.info("Using lite set of features: {model.num_feature()}")
+        logger.info(f"Using lite set of features: {model.num_feature()}")
         samples_left, samples_right = _create_lite_samples(spectrogram_features)
     else:
         logger.info(f"Using full set of features: {model.num_feature()}")
