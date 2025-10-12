@@ -15,7 +15,6 @@ from zmax_datasets.datasets.base import (
 from zmax_datasets.datasets.base import (  # noqa: F401
     Recording as BaseRecording,
 )
-from zmax_datasets.datasets.utils import mapper
 from zmax_datasets.utils.data import (
     DataType as BaseDataType,
 )
@@ -41,11 +40,8 @@ class DataType(BaseDataType):
 class Recording(BaseRecording):
     file_path: Path
 
-    def __str__(self) -> str:
-        return f"{self.subject_id}"
-
     @property
-    def subject_id(self) -> str:
+    def id(self) -> str:
         return self.file_path.stem
 
     @cached_property
@@ -74,22 +70,14 @@ class Recording(BaseRecording):
             data_type.channel
         ].astype(np.float64)
 
-    def read_annotations(
+    def _read_annotations(
         self,
         annotation_type: SleepAnnotations = SleepAnnotations.SLEEP_STAGE,
-        label_mapping: dict[int, str] | None = None,
-        default_label: str = settings.DEFAULTS["label"],
     ) -> np.ndarray:
         if annotation_type == SleepAnnotations.AROUSAL:
             raise ValueError("Arousal annotations are not supported by Wearanize+.")
 
-        annotations = self.sleep_scores
-        logger.debug(f"{annotation_type.value} annotations shape: {annotations.shape}")
-
-        if label_mapping is not None:
-            annotations = mapper(label_mapping)(annotations, default_label)
-
-        return annotations
+        return self.sleep_scores
 
 
 class WearanizePlus(Dataset):

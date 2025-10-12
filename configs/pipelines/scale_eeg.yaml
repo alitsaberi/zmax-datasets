@@ -1,0 +1,12 @@
+name: zmax_datasets
+description: "Scale ZMax EEG data from V to uV"
+
+steps:
+
+  - input_data_types: ["EEG_LEFT", "EEG_RIGHT"]
+    output_data_types: ["EEG_LEFT", "EEG_RIGHT"]
+    transforms:
+      - transform: Scale
+        config:
+          scale_factor: 1000000 # V to uV
+          

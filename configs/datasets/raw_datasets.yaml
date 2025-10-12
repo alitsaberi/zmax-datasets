@@ -1,24 +1,24 @@
 - name: donders_2022
   dataset_type: USleepDataset
   config:
-    data_dir: /project/4180000.46/zmax_datasets/donders_2022
+    data_dir: /project/4180000.46/zmax_datasets/raw/donders_2022
     
 - name: qs
   dataset_type: USleepDataset
   config:
-    data_dir: /project/4180000.46/zmax_datasets/qs
+    data_dir: /project/4180000.46/zmax_datasets/raw/qs
     
 - name: donders_2018
   dataset_type: USleepDataset
   config:
-    data_dir: /project/4180000.46/zmax_datasets/donders_2018
+    data_dir: /project/4180000.46/zmax_datasets/raw/donders_2018
 
 - name: karolinska
   dataset_type: USleepDataset
   config:
-    data_dir: /project/4180000.46/zmax_datasets/karolinska
+    data_dir: /project/4180000.46/zmax_datasets/raw/karolinska
 
 - name: wearanize_plus
   dataset_type: USleepDataset
   config:
-    data_dir: /project/4180000.46/zmax_datasets/wearanize_plus
+    data_dir: /project/4180000.46/zmax_datasets/raw/wearanize_plus

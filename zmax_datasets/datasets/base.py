@@ -54,28 +54,6 @@ class Recording(ABC):
             channel_names=[data_type.channel],
         )
 
-    def read_data_types(self, data_type_labels: list[str]) -> dict[str, Data]:
-        """
-        Read multiple data types and return as dictionary.
-
-        Args:
-            data_type_labels: List of data type labels to read
-
-        Returns:
-            Dictionary mapping data type labels to Data objects
-
-        Raises:
-            MissingDataTypeError: If any requested data type is not available
-            RawDataReadError: If reading any data type fails
-        """
-        logger.info(f"Reading data types: {data_type_labels}")
-
-        result = {}
-        for label in data_type_labels:
-            result[label] = self.read_data_type(label)
-
-        return result
-
     @abstractmethod
     def _read_raw_data(self, data_type: DataType) -> np.ndarray: ...
 
@@ -86,7 +64,7 @@ class Recording(ABC):
         default_label: str = settings.DEFAULTS["label"],
         period_length: float = settings.DEFAULTS["period_length"],
     ) -> Data:
-        annotations = self._read_annotations(annotation_type, default_label)
+        annotations = self._read_annotations(annotation_type)
         if label_mapping is not None:
             annotations = mapper(label_mapping)(annotations, default_label)
         return Data(

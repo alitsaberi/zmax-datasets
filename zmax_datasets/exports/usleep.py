@@ -19,7 +19,7 @@ from zmax_datasets.datasets.base import (
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
 from zmax_datasets.exports.utils import SleepAnnotations
-from zmax_datasets.transforms.resample import Resample
+from zmax_datasets.transforms.helpers import Resample
 from zmax_datasets.utils.data import Data
 from zmax_datasets.utils.exceptions import (
     ChannelDurationMismatchError,
@@ -87,6 +87,7 @@ class USleepExportStrategy(ExportStrategy):
         self,
         input_data_types: list[str] | None = None,
         output_data_types: list[str] | None = None,
+        rename_mapping: dict[str, str] | None = None,
         pipeline_config: "PipelineConfig | None" = None,
         sample_rate: float | None = None,
         annotation_type: SleepAnnotations | None = None,
@@ -104,6 +105,7 @@ class USleepExportStrategy(ExportStrategy):
 
         self.input_data_types = input_data_types
         self.output_data_types = output_data_types
+        self.rename_mapping = rename_mapping or {}
         self.pipeline_config = pipeline_config
         self.sample_rate = sample_rate
         self.annotation_type = annotation_type
@@ -266,8 +268,29 @@ class USleepExportStrategy(ExportStrategy):
             Dictionary of loaded data types
         """
         # Load data types
-        data_types = recording.read_data_types(self.input_data_types)
+        data_types = {}
+        for label in self.input_data_types:
+            try:
+                data_types[label] = recording.read_data_type(label)
+            except (MissingDataTypeError, RawDataReadError) as e:
+                if self.data_type_error_handling == ErrorHandling.SKIP:
+                    logger.warning(
+                        f"Skipping data type {label} for recording {recording}: {e}"
+                    )
+                else:
+                    raise e
+
         logger.info(f"Read initial data types: {list(data_types.keys())}")
+
+        # Apply renaming if specified
+        if self.rename_mapping:
+            renamed_data_types = {}
+            for original_name, data in data_types.items():
+                new_name = self.rename_mapping.get(original_name, original_name)
+                renamed_data_types[new_name] = data
+                if new_name != original_name:
+                    logger.info(f"Renamed data type: {original_name} -> {new_name}")
+            data_types = renamed_data_types
 
         # Add annotations if needed for pipeline
         if self.include_annotations_in_pipeline and annotations is not None:
@@ -364,10 +387,8 @@ class USleepExportStrategy(ExportStrategy):
 
                 data = data_types[data_type]
 
-                # Validate length consistency
                 if expected_duration is None:
                     expected_duration = data.duration
-                    data_types_info["length"] = str(data.length)
                     data_types_info["duration"] = str(expected_duration)
                 elif data.duration != expected_duration:
                     raise ChannelDurationMismatchError(
