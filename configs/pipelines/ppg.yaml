@@ -24,4 +24,4 @@ steps:
         config:
           peak_detection_method: charlton
           quality_method: templatematch
-          correct_artifacts: false
+          correct_artifacts: true
