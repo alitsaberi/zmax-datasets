@@ -3,6 +3,13 @@ description: "PPG artifact detection based on IBI and signal quality metrics"
 
 steps:
 
+  - input_data_types: ["EMP_BVP_filtered", "EMP_BVP_peaks"]
+    output_data_types: ["EMP_BVP_quality"]
+    transforms:
+      - transform: PPGQuality
+        config:
+          quality_method: templatematch
+
   - input_data_types: ["EMP_BVP_ibi", "EMP_BVP_quality"]
     output_data_types: ["EMP_BVP_artifact"]
     transforms:
