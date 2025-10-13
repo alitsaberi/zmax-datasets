@@ -18,10 +18,17 @@ steps:
           high_cutoff: 8.0
   
   - input_data_types: ["PPG_filtered"]
-    output_data_types: ["PPG_peaks", "PPG_ibi", "PPG_rate", "PPG_quality"]
+    output_data_types: ["PPG_peaks", "PPG_ibi", "PPG_rate"]
     transforms:
-      - transform: ProcessPPG
+      - transform: PPGProcess
         config:
-          peak_detection_method: charlton
-          quality_method: templatematch
+          peak_detection_method: elgendi
           correct_artifacts: true
+
+  # Quality assessment (optional, computationally expensive)
+  # - input_data_types: ["PPG_filtered", "PPG_peaks"]
+  #   output_data_types: ["PPG_quality"]
+  #   transforms:
+  #     - transform: PPGQuality
+  #       config:
+  #         quality_method: templatematch
