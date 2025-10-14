@@ -38,7 +38,7 @@ class USleepRecording(Recording):
     def data_types(self) -> dict[str, DataType]:
         """Get available data types from the HDF5 file."""
         data_types = {}
-        with h5py.File(self._data_file, "r") as f:
+        with h5py.File(self._data_file, "r", locking=False) as f:
             for channel_name in f[CHANNELS_GROUP]:
                 channel_data = f[CHANNELS_GROUP][channel_name]
                 sample_rate = channel_data.attrs.get(
@@ -59,7 +59,7 @@ class USleepRecording(Recording):
 
     def _read_raw_data(self, data_type: DataType) -> np.ndarray:
         """Read raw data from HDF5 file."""
-        with h5py.File(self._data_file, "r") as f:
+        with h5py.File(self._data_file, "r", locking=False) as f:
             return f["channels"][data_type.channel][:]
 
     def _read_annotations(
