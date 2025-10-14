@@ -162,6 +162,7 @@ class PPGArtifactLabels(Transform):
         quality_threshold: float,
         ibi_range: tuple[float, float] = IBI_RANGE,
         min_valid_ratio: float = DEFAULT_MIN_VALID_RATIO,
+        ignore_last_segment: bool = True,
     ):
         """Initialize PPGArtifactLabels transform.
 
@@ -171,11 +172,14 @@ class PPGArtifactLabels(Transform):
             ibi_range (tuple[float, float]): Valid IBI range in ms
                 (e.g., 300-2000ms = 30-200 BPM).
             min_valid_ratio (float): Minimum ratio of valid samples in segment.
+            ignore_last_segment (bool):
+                Whether to ignore the last segment if it's not full.
         """
         self.segment_duration = segment_duration
         self.quality_threshold = quality_threshold
         self.ibi_range = ibi_range
         self.min_valid_ratio = min_valid_ratio
+        self.ignore_last_segment = ignore_last_segment
 
     def _evaluate_segment(self, ibi: np.ndarray, quality: np.ndarray) -> float:
         """Calculate artifact score for a segment.
@@ -238,7 +242,7 @@ class PPGArtifactLabels(Transform):
             labels.append(score < self.min_valid_ratio)
 
         # Handle any remaining samples in last segment
-        if len(ibi) % samples_per_segment:
+        if len(ibi) % samples_per_segment and not self.ignore_last_segment:
             start_idx = n_segments * samples_per_segment
             segment_ibi = ibi[start_idx:]
             segment_quality = quality[start_idx:]
