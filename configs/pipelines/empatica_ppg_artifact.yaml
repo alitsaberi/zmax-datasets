@@ -13,7 +13,7 @@ steps:
   - input_data_types: ["EMP_BVP_ibi", "EMP_BVP_quality"]
     output_data_types: ["EMP_BVP_artifact"]
     transforms:
-      - transform: PPGArtifactLabels
+      - transform: IBIArtifactLabels
         config:
           segment_duration: 30
           quality_threshold: 0.8

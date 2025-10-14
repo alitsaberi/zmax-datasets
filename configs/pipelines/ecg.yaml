@@ -1,0 +1,27 @@
+name: ecg_processing
+description: "ECG processing pipeline to extract peaks, inter-beat intervals, instantaneous heart rate, and signal quality"
+
+steps:
+  - input_data_types: ["ECG"]
+    output_data_types: ["ECG_resampled"]
+    transforms:
+      - transform: Resample
+        config:
+          new_sample_rate: 128.0
+  
+  - input_data_types: ["ECG_resampled"]
+    output_data_types: ["ECG_filtered", "ECG_peaks", "ECG_ibi", "ECG_rate"]
+    transforms:
+      - transform: ECGProcess
+        config:
+          peak_detection_method: neurokit
+          correct_artifacts: true
+          invert_signal: true
+
+  # Quality assessment (optional, computationally expensive)
+  # - input_data_types: ["PPG_filtered", "PPG_peaks"]
+  #   output_data_types: ["PPG_quality"]
+  #   transforms:
+  #     - transform: PPGQuality
+  #       config:
+  #         quality_method: templatematch

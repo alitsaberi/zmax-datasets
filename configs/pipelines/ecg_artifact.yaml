@@ -1,24 +1,24 @@
-name: ppg_artifact
-description: "PPG artifact detection based on IBI and signal quality metrics"
+name: ecg_artifact
+description: "ECG artifact detection based on IBI and signal quality metrics"
 
 steps:
 
-  - input_data_types: ["PPG_filtered", "PPG_peaks", "PPG_ibi", "PPG_rate"]
-    output_data_types: ["PPG_filtered", "PPG_peaks", "PPG_ibi", "PPG_rate"]
+  - input_data_types: ["ECG_filtered", "ECG_peaks", "ECG_ibi", "ECG_rate"]
+    output_data_types: ["ECG_filtered", "ECG_peaks", "ECG_ibi", "ECG_rate"]
     transforms:
       - transform: TrimToMultiple
         config:
           duration: 10.0
 
-  - input_data_types: ["PPG_filtered", "PPG_peaks"]
-    output_data_types: ["PPG_quality"]
+  - input_data_types: ["ECG_filtered", "ECG_peaks"]
+    output_data_types: ["ECG_quality"]
     transforms:
-      - transform: PPGQuality
+      - transform: ECGQuality
         config:
           quality_method: templatematch
 
-  - input_data_types: ["PPG_ibi", "PPG_quality"]
-    output_data_types: ["PPG_artifact"]
+  - input_data_types: ["ECG_ibi", "ECG_quality"]
+    output_data_types: ["ECG_artifact"]
     transforms:
       - transform: IBIArtifactLabels
         config:
