@@ -25,10 +25,9 @@ steps:
           high_cutoff: 8.0
   
   - input_data_types: ["EMP_BVP_filtered"]
-    output_data_types: ["EMP_BVP_peaks", "EMP_BVP_ibi", "EMP_BVP_rate", "EMP_BVP_quality"]
+    output_data_types: ["EMP_BVP_peaks", "EMP_BVP_ibi", "EMP_BVP_rate"]
     transforms:
-      - transform: ProcessPPG
+      - transform: PPGProcess
         config:
           peak_detection_method: charlton
-          quality_method: templatematch
           correct_artifacts: true

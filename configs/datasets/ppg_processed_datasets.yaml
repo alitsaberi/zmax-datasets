@@ -22,3 +22,8 @@
   dataset_type: USleepDataset
   config:
     data_dir: /project/4180000.46/zmax_datasets/ppg_processed/wearanize_plus
+
+- name: mesa
+  dataset_type: USleepDataset
+  config:
+    data_dir: /project/4180000.46/sleep_datasets/processed/mesa
