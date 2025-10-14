@@ -1,3 +1,6 @@
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -98,6 +101,7 @@ class USleepExportStrategy(ExportStrategy):
         with_sleep_scoring: bool = False,
         catalog_file_name: str = CATALOG_FILE_NAME,
         period_length: int = settings.DEFAULTS["period_length"],
+        n_jobs: int | None = None,
     ):
         super().__init__(
             existing_file_handling=existing_file_handling, error_handling=error_handling
@@ -129,6 +133,8 @@ class USleepExportStrategy(ExportStrategy):
                     break
 
         self.period_length = period_length
+        self.n_jobs = n_jobs if n_jobs is not None else len(os.sched_getaffinity(0))
+        self._catalog_lock = threading.Lock()  # Thread-safe catalog updates
 
     def _get_processed_recordings(self, out_dir: Path) -> set[str]:
         """Get set of recording IDs that were successfully processed."""
@@ -141,85 +147,164 @@ class USleepExportStrategy(ExportStrategy):
         logger.info(f"Found {len(processed)} processed recordings in catalog")
         return set(processed)
 
+    def _process_single_recording(
+        self,
+        recording: Recording,
+        out_dir: Path,
+        hypnogram_mapping: dict[int, str],
+    ) -> dict:
+        """Process a single recording and return record info.
+
+        Args:
+            recording: Recording to process
+            out_dir: Output directory
+            hypnogram_mapping: Mapping from numeric to string labels
+
+        Returns:
+            Dictionary with recording info for catalog
+        """
+        recording_id = str(recording)
+        logger.info(f"Processing recording: {recording_id}")
+
+        # Set up recording directory
+        out_dir_path = out_dir / recording_id
+        out_dir_path.mkdir(parents=True, exist_ok=True)
+
+        # Initialize record info for catalog
+        record_info = {
+            "recording_id": recording_id,
+            "has_annotations": False,
+            "export_status": "failed",
+            **{data_type: False for data_type in self.output_data_types},
+        }
+
+        # Only add label counts if annotation_type is set
+        if self.annotation_type is not None:
+            # Initialize all possible label counts to 0
+            for label in settings.DEFAULTS["hypnogram_mapping"].values():
+                record_info[f"{label}_count"] = 0
+
+        try:
+            # 1. Load data
+            annotations = self._load_annotations(recording, hypnogram_mapping)
+            data_types = self._load_data(recording, annotations)
+
+            # 2. Process data
+            data_types = self._process_data(data_types)
+
+            # 3. Export processed data
+            data_info = self._write_data_types(data_types, out_dir_path, recording)
+            record_info.update(data_info)
+
+            # 4. Export annotations
+            if ANNOTATIONS_DATA_TYPE in data_types:
+                annotations = data_types.pop(ANNOTATIONS_DATA_TYPE)
+
+            annotation_info = self._write_hypnogram(
+                annotations, out_dir_path, recording, hypnogram_mapping
+            )
+            record_info.update(annotation_info)
+
+            record_info["export_status"] = "success"
+
+        except (
+            MissingDataTypeError,
+            RawDataReadError,
+            SleepScoringReadError,
+            SleepScoringFileNotFoundError,
+            SleepScoringFileNotSet,
+            ChannelDurationMismatchError,
+            SampleRateNotFoundError,
+            FileExistsError,
+            FileNotFoundError,
+            ValueError,
+        ) as e:
+            self._handle_error(e, recording)
+            record_info["error_message"] = str(e)
+
+        return record_info
+
     def _export(self, dataset: Dataset, out_dir: Path) -> None:
         # Read successful recordings once at the start
         processed_recordings = self._get_processed_recordings(out_dir)
+
+        # Get all recordings to process
+        all_recordings = list(
+            dataset.get_recordings(with_sleep_scoring=self.with_sleep_scoring)
+        )
+
+        # Filter out already processed recordings
+        recordings_to_process = [
+            rec for rec in all_recordings if str(rec) not in processed_recordings
+        ]
+
+        logger.info(
+            f"Total recordings: {len(all_recordings)}, "
+            f"Already processed: {len(processed_recordings)}, "
+            f"To process: {len(recordings_to_process)}"
+        )
+
+        if not recordings_to_process:
+            logger.info("No new recordings to process.")
+            return
+
         n_new_processed_recordings = 0
 
-        for i, recording in enumerate(
-            dataset.get_recordings(with_sleep_scoring=self.with_sleep_scoring)
-        ):
-            logger.info(f"-> Recording {i+1}: {recording}")
-            recording_id = str(recording)
+        # Use parallel processing if n_jobs > 1
+        if self.n_jobs > 1:
+            logger.info(f"Processing recordings in parallel with {self.n_jobs} workers")
 
-            # Skip if already successfully processed
-            if recording_id in processed_recordings:
-                logger.info(f"Skipping recording {recording_id} - already processed")
-                continue
+            with ThreadPoolExecutor(max_workers=self.n_jobs) as executor:
+                # Submit all tasks
+                future_to_recording = {
+                    executor.submit(
+                        self._process_single_recording,
+                        recording,
+                        out_dir,
+                        dataset.hypnogram_mapping,
+                    ): recording
+                    for recording in recordings_to_process
+                }
 
-            # Set up recording directory
-            out_dir_path = out_dir / recording_id
-            out_dir_path.mkdir(parents=True, exist_ok=True)
+                # Process results as they complete
+                for i, future in enumerate(as_completed(future_to_recording), 1):
+                    recording = future_to_recording[future]
+                    logger.info(
+                        f"-> Recording {i}/{len(recordings_to_process)}: {recording}"
+                    )
 
-            # Initialize record info for catalog
-            record_info = {
-                "recording_id": recording_id,
-                "has_annotations": False,
-                "export_status": "failed",
-                **{data_type: False for data_type in self.output_data_types},
-            }
+                    try:
+                        record_info = future.result()
+                        if record_info["export_status"] == "success":
+                            n_new_processed_recordings += 1
 
-            # Only add label counts if annotation_type is set
-            if self.annotation_type is not None:
-                # Initialize all possible label counts to 0
-                for label in settings.DEFAULTS["hypnogram_mapping"].values():
-                    record_info[f"{label}_count"] = 0
+                        # Update catalog after each recording
+                        self._update_catalog(record_info, out_dir)
 
-            try:
-                # 1. Load data
-                annotations = self._load_annotations(
-                    recording, dataset.hypnogram_mapping
+                    except Exception as e:
+                        logger.error(f"Error processing recording {recording}: {e}")
+                        if self.error_handling == ErrorHandling.RAISE:
+                            raise
+        else:
+            # Sequential processing
+            logger.info("Processing recordings sequentially")
+
+            for i, recording in enumerate(recordings_to_process, 1):
+                logger.info(
+                    f"-> Recording {i}/{len(recordings_to_process)}: {recording}"
                 )
-                data_types = self._load_data(recording, annotations)
 
-                # 2. Process data
-                data_types = self._process_data(data_types)
-
-                # 3. Export processed data
-                data_info = self._write_data_types(data_types, out_dir_path, recording)
-                record_info.update(data_info)
-
-                # 4. Export annotations
-                if ANNOTATIONS_DATA_TYPE in data_types:
-                    annotations = data_types.pop(ANNOTATIONS_DATA_TYPE)
-
-                annotation_info = self._write_hypnogram(
-                    annotations, out_dir_path, recording, dataset.hypnogram_mapping
+                record_info = self._process_single_recording(
+                    recording, out_dir, dataset.hypnogram_mapping
                 )
-                record_info.update(annotation_info)
 
-                record_info["export_status"] = "success"
-                n_new_processed_recordings += 1
+                if record_info["export_status"] == "success":
+                    n_new_processed_recordings += 1
 
-            except (
-                MissingDataTypeError,
-                RawDataReadError,
-                SleepScoringReadError,
-                SleepScoringFileNotFoundError,
-                SleepScoringFileNotSet,
-                ChannelDurationMismatchError,
-                SampleRateNotFoundError,
-                FileExistsError,
-                FileNotFoundError,
-                ValueError,
-            ) as e:
-                self._handle_error(e, recording)
-                record_info["error_message"] = str(e)
+                # Update catalog after each recording
+                self._update_catalog(record_info, out_dir)
 
-            # Update catalog after each recording
-            self._update_catalog(record_info, out_dir)
-
-        logger.info(f"Prepared {n_new_processed_recordings} recordings.")
+        logger.info(f"Prepared {n_new_processed_recordings} new recordings.")
 
     def _load_annotations(
         self,
@@ -356,7 +441,7 @@ class USleepExportStrategy(ExportStrategy):
         extracted_data_types = []
         expected_duration = None
 
-        with h5py.File(out_file_path, mode) as out_file:
+        with h5py.File(out_file_path, mode, locking=False) as out_file:
             # Check sample rate if file already exists and we're appending
             if (
                 self.sample_rate is not None
@@ -503,23 +588,28 @@ class USleepExportStrategy(ExportStrategy):
         dataset.attrs["sample_rate"] = data.sample_rate
 
     def _update_catalog(self, record_info: dict, out_dir: Path) -> None:
-        """Update catalog with new record info."""
+        """Update catalog with new record info.
+
+        This method is thread-safe and can be called concurrently from multiple threads.
+        """
         catalog_path = out_dir / self.catalog_file_name
 
-        # Read existing catalog if it exists
-        if catalog_path.exists():
-            df = pd.read_csv(catalog_path)
-            # Update or append record
-            idx = df[df["recording_id"] == record_info["recording_id"]].index
-            if len(idx) > 0:
-                df.loc[idx[0]] = pd.Series(record_info)
+        # Use lock to ensure thread-safe catalog updates
+        with self._catalog_lock:
+            # Read existing catalog if it exists
+            if catalog_path.exists():
+                df = pd.read_csv(catalog_path)
+                # Update or append record
+                idx = df[df["recording_id"] == record_info["recording_id"]].index
+                if len(idx) > 0:
+                    df.loc[idx[0]] = pd.Series(record_info)
+                else:
+                    df = pd.concat([df, pd.DataFrame([record_info])], ignore_index=True)
             else:
-                df = pd.concat([df, pd.DataFrame([record_info])], ignore_index=True)
-        else:
-            df = pd.DataFrame([record_info])
+                df = pd.DataFrame([record_info])
 
-        df.to_csv(catalog_path, index=False)
-        logger.info(f"Updated catalog at {catalog_path}")
+            df.to_csv(catalog_path, index=False)
+            logger.info(f"Updated catalog at {catalog_path}")
 
     def _handle_error(
         self,

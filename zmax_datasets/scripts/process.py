@@ -122,6 +122,16 @@ def parse_arguments():
         help="Catalog file name",
         default=CATALOG_FILE_NAME,
     )
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        help=(
+            "Number of parallel workers for processing recordings. "
+            "Default is None (uses all available CPU cores). "
+            "Set to 1 for sequential processing."
+        ),
+        default=None,
+    )
 
     return parser.parse_args()
 
@@ -200,6 +210,7 @@ def _create_export_strategy(
         error_handling=error_handling,
         with_sleep_scoring=args.only_with_sleep_scoring,
         catalog_file_name=args.catalog_file_name,
+        n_jobs=args.n_jobs,
     )
 
     return export_strategy
@@ -257,7 +268,10 @@ def print_processing_summary(
     for dataset_name, dataset in datasets.items():
         print(f"  - {dataset_name}: {dataset.n_recordings} recordings")
 
-    print(f"\nOutput directory: {args.output_dir}")
+    print(
+        f"\nParallel workers: {args.n_jobs if args.n_jobs else 'auto (all CPU cores)'}"
+    )
+    print(f"Output directory: {args.output_dir}")
     print("=" * 60)
 
 
