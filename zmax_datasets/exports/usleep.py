@@ -351,21 +351,24 @@ class USleepExportStrategy(ExportStrategy):
             else "a"
         )
 
-        if self.sample_rate is not None and out_file_path.exists():
-            with h5py.File(out_file_path, "r") as f:
-                if (file_sample_rate := f.attrs.get("sample_rate")) != self.sample_rate:
-                    raise ValueError(
-                        f"Sample rate mismatch:"
-                        f" file has {file_sample_rate} Hz,"
-                        f" but {self.sample_rate} Hz was provided"
-                    )
-
         # Write outputs to h5 file
         data_types_info = {}
         extracted_data_types = []
         expected_duration = None
 
         with h5py.File(out_file_path, mode) as out_file:
+            # Check sample rate if file already exists and we're appending
+            if (
+                self.sample_rate is not None
+                and mode == "a"
+                and (file_sample_rate := out_file.attrs.get("sample_rate"))
+                != self.sample_rate
+            ):
+                raise ValueError(
+                    f"Sample rate mismatch:"
+                    f" file has {file_sample_rate} Hz,"
+                    f" but {self.sample_rate} Hz was provided"
+                )
             # Create channels group if it doesn't exist
             if "channels" not in out_file:
                 out_file.create_group("channels")

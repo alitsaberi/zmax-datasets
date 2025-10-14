@@ -41,7 +41,7 @@ def _calculate_metrics(true_labels: np.ndarray, predicted_labels: np.ndarray) ->
 
 
 def _get_data(data_file_path: Path) -> Data:
-    with h5py.File(data_file_path) as h5_file:
+    with h5py.File(data_file_path, "r", locking=False) as h5_file:
         eeg_l = h5_file["channels"]["F7-Fpz"][:]
         eeg_r = h5_file["channels"]["F8-Fpz"][:]
 
