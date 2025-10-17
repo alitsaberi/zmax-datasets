@@ -90,7 +90,8 @@ class USleepExportStrategy(ExportStrategy):
         self,
         input_data_types: list[str] | None = None,
         output_data_types: list[str] | None = None,
-        rename_mapping: dict[str, str] | None = None,
+        input_rename_mapping: dict[str, str] | None = None,
+        output_rename_mapping: dict[str, str] | None = None,
         pipeline_config: "PipelineConfig | None" = None,
         sample_rate: float | None = None,
         annotation_type: SleepAnnotations | None = None,
@@ -109,7 +110,8 @@ class USleepExportStrategy(ExportStrategy):
 
         self.input_data_types = input_data_types
         self.output_data_types = output_data_types
-        self.rename_mapping = rename_mapping or {}
+        self.input_rename_mapping = input_rename_mapping or {}
+        self.output_rename_mapping = output_rename_mapping or {}
         self.pipeline_config = pipeline_config
         self.sample_rate = sample_rate
         self.annotation_type = annotation_type
@@ -367,14 +369,16 @@ class USleepExportStrategy(ExportStrategy):
 
         logger.info(f"Read initial data types: {list(data_types.keys())}")
 
-        # Apply renaming if specified
-        if self.rename_mapping:
+        # Apply input renaming if specified
+        if self.input_rename_mapping:
             renamed_data_types = {}
             for original_name, data in data_types.items():
-                new_name = self.rename_mapping.get(original_name, original_name)
+                new_name = self.input_rename_mapping.get(original_name, original_name)
                 renamed_data_types[new_name] = data
                 if new_name != original_name:
-                    logger.info(f"Renamed data type: {original_name} -> {new_name}")
+                    logger.info(
+                        f"Renamed input data type: {original_name} -> {new_name}"
+                    )
             data_types = renamed_data_types
 
         # Add annotations if needed for pipeline
@@ -464,7 +468,10 @@ class USleepExportStrategy(ExportStrategy):
             for data_type in self.output_data_types:
                 data_types_info[data_type] = False
 
-                if data_type not in data_types:
+                # Apply output renaming to find the actual data type name
+                actual_data_type = self.output_rename_mapping.get(data_type, data_type)
+
+                if actual_data_type not in data_types:
                     if self.data_type_error_handling == ErrorHandling.SKIP:
                         logger.warning(f"Skipping missing data type: {data_type}")
                         continue
@@ -473,7 +480,7 @@ class USleepExportStrategy(ExportStrategy):
                             f"Data type {data_type} not found in output"
                         )
 
-                data = data_types[data_type]
+                data = data_types[actual_data_type]
 
                 if expected_duration is None:
                     expected_duration = data.duration
@@ -482,6 +489,12 @@ class USleepExportStrategy(ExportStrategy):
                     raise ChannelDurationMismatchError(
                         f"Data type {data_type} has duration {data.duration}, "
                         f"expected {expected_duration}"
+                    )
+
+                # Log output renaming if applicable
+                if actual_data_type != data_type:
+                    logger.info(
+                        f"Using output data type: {actual_data_type} -> {data_type}"
                     )
 
                 # If appending, check if channel already exists
