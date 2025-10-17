@@ -103,6 +103,7 @@ class USleepExportStrategy(ExportStrategy):
         catalog_file_name: str = CATALOG_FILE_NAME,
         period_length: int = settings.DEFAULTS["period_length"],
         n_jobs: int | None = None,
+        suffix: str = "",
     ):
         super().__init__(
             existing_file_handling=existing_file_handling, error_handling=error_handling
@@ -136,6 +137,7 @@ class USleepExportStrategy(ExportStrategy):
 
         self.period_length = period_length
         self.n_jobs = n_jobs if n_jobs is not None else len(os.sched_getaffinity(0))
+        self.suffix = suffix
         self._catalog_lock = threading.Lock()  # Thread-safe catalog updates
 
     def _get_processed_recordings(self, out_dir: Path) -> set[str]:
@@ -170,14 +172,13 @@ class USleepExportStrategy(ExportStrategy):
 
         # Set up recording directory
         out_dir_path = out_dir / recording_id
-        out_dir_path.mkdir(parents=True, exist_ok=True)
 
         # Initialize record info for catalog
         record_info = {
             "recording_id": recording_id,
             "has_annotations": False,
             "export_status": "failed",
-            **{data_type: False for data_type in self.output_data_types},
+            **{data_type: False for data_type in (self.output_data_types or [])},
         }
 
         # Only add label counts if annotation_type is set
@@ -193,6 +194,8 @@ class USleepExportStrategy(ExportStrategy):
 
             # 2. Process data
             data_types = self._process_data(data_types)
+
+            out_dir_path.mkdir(parents=True, exist_ok=True)
 
             # 3. Export processed data
             data_info = self._write_data_types(data_types, out_dir_path, recording)
@@ -383,6 +386,28 @@ class USleepExportStrategy(ExportStrategy):
 
         # Add annotations if needed for pipeline
         if self.include_annotations_in_pipeline and annotations is not None:
+            if annotations.duration != (
+                data_duration := data_types[list(data_types.keys())[0]].duration
+            ):
+                logger.warning(
+                    f"Annotations duration {annotations.duration}"
+                    f" does not match data type duration {data_duration}"
+                    f". Trimming data and annotations to match."
+                )
+
+                if annotations.duration > data_duration:
+                    annotations = annotations.slice_by_time(
+                        end_timestamp=data_types[list(data_types.keys())[0]].timestamps[
+                            -1
+                        ],
+                    )
+                else:
+                    for data_type, data in data_types.items():
+                        if data_type != ANNOTATIONS_DATA_TYPE:
+                            data_types[data_type] = data.slice_by_time(
+                                end_timestamp=annotations.timestamps[-1],
+                            )
+
             data_types[ANNOTATIONS_DATA_TYPE] = annotations
             logger.info("Added annotations data to data types")
 
@@ -426,9 +451,18 @@ class USleepExportStrategy(ExportStrategy):
         """Write data types to HDF5 file."""
         logger.info("Writing data types...")
 
+        if not data_types:
+            logger.info("No data types to write, skipping HDF5 file creation")
+            return {}
+
+        # Check if there are any output data types to write
+        if not self.output_data_types:
+            logger.info("No output data types specified, skipping HDF5 file creation")
+            return {}
+
         out_file_path = (
             recording_out_dir
-            / f"{recording}.{settings.USLEEP['data_types_file_extension']}"
+            / f"{recording}{self.suffix}.{settings.USLEEP['data_types_file_extension']}"
         )
 
         if not _handle_existing_file(out_file_path, self.existing_data_file_handling):
@@ -468,10 +502,7 @@ class USleepExportStrategy(ExportStrategy):
             for data_type in self.output_data_types:
                 data_types_info[data_type] = False
 
-                # Apply output renaming to find the actual data type name
-                actual_data_type = self.output_rename_mapping.get(data_type, data_type)
-
-                if actual_data_type not in data_types:
+                if data_type not in data_types:
                     if self.data_type_error_handling == ErrorHandling.SKIP:
                         logger.warning(f"Skipping missing data type: {data_type}")
                         continue
@@ -480,7 +511,7 @@ class USleepExportStrategy(ExportStrategy):
                             f"Data type {data_type} not found in output"
                         )
 
-                data = data_types[actual_data_type]
+                data = data_types[data_type]
 
                 if expected_duration is None:
                     expected_duration = data.duration
@@ -491,23 +522,25 @@ class USleepExportStrategy(ExportStrategy):
                         f"expected {expected_duration}"
                     )
 
+                data_type_name = self.output_rename_mapping.get(data_type, data_type)
+
                 # Log output renaming if applicable
-                if actual_data_type != data_type:
+                if data_type_name != data_type:
                     logger.info(
-                        f"Using output data type: {actual_data_type} -> {data_type}"
+                        f"Using output data type: {data_type} -> {data_type_name}"
                     )
 
                 # If appending, check if channel already exists
-                if data_type in out_file["channels"]:
-                    logger.info(f"Overwriting existing channel: {data_type}")
-                    del out_file["channels"][data_type]
+                if data_type_name in out_file["channels"]:
+                    logger.info(f"Overwriting existing channel: {data_type_name}")
+                    del out_file["channels"][data_type_name]
 
                 # Calculate and store channel statistics as separate columns
                 channel_stats = self._calculate_channel_stats(data)
                 for stat_name, stat_value in channel_stats.items():
                     data_types_info[f"{data_type}_{stat_name}"] = stat_value
 
-                self._write_data_to_hdf5(out_file, data_type, data, index)
+                self._write_data_to_hdf5(out_file, data_type_name, data, index)
                 extracted_data_types.append(data_type)
                 data_types_info[data_type] = True
                 index += 1
@@ -548,7 +581,7 @@ class USleepExportStrategy(ExportStrategy):
         logger.info("Writing hypnogram...")
         out_file_path = (
             recording_out_dir
-            / f"{recording}.{settings.USLEEP['hypnogram_file_extension']}"
+            / f"{recording}{self.suffix}.{settings.USLEEP['hypnogram_file_extension']}"
         )
 
         if not _handle_existing_file(

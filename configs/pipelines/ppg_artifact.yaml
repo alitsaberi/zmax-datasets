@@ -3,12 +3,12 @@ description: "PPG artifact detection based on IBI and signal quality metrics"
 
 steps:
 
-  - input_data_types: ["PPG_filtered", "PPG_peaks", "PPG_ibi", "PPG_rate"]
-    output_data_types: ["PPG_filtered", "PPG_peaks", "PPG_ibi", "PPG_rate"]
+  - input_data_types: ["PPG_filtered", "PPG_peaks", "PPG_ibi", "PPG_hr", "PPG_artifactual_peaks"]
+    output_data_types: ["PPG_filtered", "PPG_peaks", "PPG_ibi", "PPG_hr", "PPG_artifactual_peaks"]
     transforms:
       - transform: TrimToMultiple
         config:
-          duration: 10.0
+          duration: 30.0
 
   - input_data_types: ["PPG_filtered", "PPG_peaks"]
     output_data_types: ["PPG_quality"]
@@ -22,10 +22,9 @@ steps:
     transforms:
       - transform: IBIArtifactLabels
         config:
-          segment_duration: 10
+          segment_duration: 30
           quality_threshold: 0.8
           ibi_range: [300, 2000]  # Valid IBI range in ms
-          min_valid_ratio: 0.5  # Minimum ratio of valid samples in segment
 
   # - input_data_types: ["annotations", "PPG_artifact"]
   #   output_data_types: ["annotations"]

@@ -1,5 +1,5 @@
-name: ppg_processing
-description: "PPG processing pipeline to extract peaks, inter-beat intervals, instantaneous heart rate, and signal quality"
+name: ppg
+description: "PPG processing pipeline to extract peaks, inter-beat intervals, instantaneous heart rate"
 
 steps:
   - input_data_types: ["PPG"]
@@ -18,17 +18,23 @@ steps:
           high_cutoff: 8.0
   
   - input_data_types: ["PPG_filtered"]
-    output_data_types: ["PPG_peaks", "PPG_ibi", "PPG_rate"]
+    output_data_types: ["PPG_peaks"]
     transforms:
-      - transform: PPGProcess
+      - transform: PPGPeaks
         config:
-          peak_detection_method: elgendi
-          correct_artifacts: true
+          peak_detection_method: charlton
+          correct_artifacts: false
 
-  # Quality assessment (optional, computationally expensive)
-  # - input_data_types: ["PPG_filtered", "PPG_peaks"]
-  #   output_data_types: ["PPG_quality"]
-  #   transforms:
-  #     - transform: PPGQuality
-  #       config:
-  #         quality_method: templatematch
+  - input_data_types: ["PPG_peaks"]
+    output_data_types: ["PPG_fixed_peaks", "PPG_artifactual_peaks"]
+    transforms:
+      - transform: FixPeaks
+        config:
+          aggregate_artifacts: true
+
+  - input_data_types: ["PPG_fixed_peaks"]
+    output_data_types: ["PPG_ibi", "PPG_hr"]
+    transforms:
+      - transform: HeartRate
+        config:
+          interpolation_method: monotone_cubic

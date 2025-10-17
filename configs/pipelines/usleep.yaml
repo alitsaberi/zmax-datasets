@@ -1,0 +1,18 @@
+name: usleep
+description: "Prepare for USleep"
+
+steps:
+
+  - input_data_types: ["hr", "ACCELEROMETER_magnitude", "ACCELEROMETER_magnitude_derivative", "NOISE"]
+    output_data_types: ["hr", "ACCELEROMETER_magnitude", "ACCELEROMETER_magnitude_derivative", "NOISE"]
+    transforms:
+      - transform: TrimToMultiple
+        config:
+          duration: 30.0
+      - transform: ClipNoisyValues
+        config:
+          iqr_factor: 20
+      - transform: Scale
+        config:
+          method: robust
+  

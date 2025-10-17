@@ -1,0 +1,9 @@
+name: merge_artifact
+description: "Merge artifact labels with annotations"
+
+steps:
+
+  - input_data_types: ["annotations", "artifact"]
+    output_data_types: ["annotations"]
+    transforms:
+      - transform: MergeArtifactLabels

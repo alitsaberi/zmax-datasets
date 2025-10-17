@@ -4,6 +4,7 @@ import neurokit2 as nk
 import numpy as np
 
 from zmax_datasets.transforms.base import Transform
+from zmax_datasets.transforms.hrv import get_peak_indices
 from zmax_datasets.utils.data import Data
 
 
@@ -35,24 +36,22 @@ class InterpolationMethod(Enum):
     AKIMA = "akima"
 
 
-class ECGProcess(Transform):
+class ECGPeaks(Transform):
     """
-    Process ECG signal to extract peaks, inter-beat intervals, and heart rate.
+    Process ECG signal to extract peaks.
     """
 
-    CHANNEL_NAMES = ["cleaned", "peaks", "ibi", "rate"]
+    CHANNEL_NAMES = ["cleaned", "peaks"]
 
     def __init__(
         self,
         peak_detection_method: str = PeakDetectionMethod.NEUROKIT,
         correct_artifacts: bool = False,
-        interpolation_method: str = InterpolationMethod.MONOTONE_CUBIC,
-        invert_signal: bool = False,
+        fix_inversion: bool = True,
     ):
         self.peak_detection_method = peak_detection_method
         self.correct_artifacts = correct_artifacts
-        self.interpolation_method = interpolation_method
-        self.invert_signal = invert_signal
+        self.fix_inversion = fix_inversion
 
     def __call__(self, data: Data) -> Data:
         if data.n_channels != 1:
@@ -63,8 +62,11 @@ class ECGProcess(Transform):
 
         ecg_signal = data.array.squeeze()
 
-        if self.invert_signal:
-            ecg_signal = -ecg_signal
+        # Fix inversion
+        if self.fix_inversion:
+            ecg_signal, _ = nk.ecg_invert(
+                ecg_signal, sampling_rate=int(data.sample_rate)
+            )
 
         # Clean ECG signal
         ecg_cleaned = nk.ecg_clean(
@@ -74,25 +76,14 @@ class ECGProcess(Transform):
         )
 
         # Peak detection
-        peaks, info = nk.ecg_peaks(
-            ecg_signal,
+        peaks, _ = nk.ecg_peaks(
+            ecg_cleaned,
             sampling_rate=int(data.sample_rate),
             method=self.peak_detection_method,
             correct_artifacts=self.correct_artifacts,
         )
 
-        # Signal period interpolation
-        periods = nk.signal_period(
-            info["ECG_R_Peaks"],
-            sampling_rate=int(data.sample_rate),
-            desired_length=len(ecg_signal),
-            interpolation_method=self.interpolation_method.value,
-        )
-
-        ibi = periods * 1000
-        rate = 60 / periods
-
-        array = np.array([ecg_cleaned, peaks["ECG_R_Peaks"].values, ibi, rate]).T
+        array = np.array([ecg_cleaned, peaks["ECG_R_Peaks"].values]).T
 
         return Data(
             array=array,
@@ -142,7 +133,7 @@ class ECGQuality(Transform):
         r_peaks_binary = data.array[:, 1]
 
         # Convert binary peaks to indices
-        r_peaks_indices = np.where(r_peaks_binary == 1)[0]
+        r_peaks_indices = get_peak_indices(r_peaks_binary)
 
         quality = nk.ecg_quality(
             ecg_signal,
