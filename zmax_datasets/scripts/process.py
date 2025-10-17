@@ -4,11 +4,11 @@ from pathlib import Path
 from loguru import logger
 
 from zmax_datasets.datasets.base import Dataset
+from zmax_datasets.datasets.configs import DatasetConfig
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
 from zmax_datasets.exports.usleep import CATALOG_FILE_NAME, USleepExportStrategy
 from zmax_datasets.exports.utils import SleepAnnotations
 from zmax_datasets.pipeline.configs import PipelineConfig
-from zmax_datasets.scripts.export import DatasetConfig
 from zmax_datasets.settings import LOGS_DIR
 from zmax_datasets.utils.helpers import (
     generate_timestamped_file_name,
@@ -73,6 +73,17 @@ def parse_arguments():
         help="Data types to write to output files",
         type=str,
         default=[],
+    )
+    parser.add_argument(
+        "--rename-output-data-types",
+        nargs="+",
+        help=(
+            "Rename output data types before writing them."
+            " Must have same length as --output-data-types."
+            " If not provided, output data types will not be renamed."
+        ),
+        type=str,
+        default=None,
     )
     parser.add_argument(
         "--sample-rate",
@@ -185,7 +196,8 @@ def _load_pipeline_config(pipeline_file: Path) -> PipelineConfig:
 
 def _create_export_strategy(
     pipeline_config: PipelineConfig,
-    rename_mapping: dict[str, str] | None,
+    input_rename_mapping: dict[str, str] | None,
+    output_rename_mapping: dict[str, str] | None,
     args: argparse.Namespace,
 ) -> USleepExportStrategy:
     # Configure error handling
@@ -200,7 +212,8 @@ def _create_export_strategy(
     export_strategy = USleepExportStrategy(
         input_data_types=args.input_data_types,
         output_data_types=args.output_data_types,
-        rename_mapping=rename_mapping,
+        input_rename_mapping=input_rename_mapping,
+        output_rename_mapping=output_rename_mapping,
         pipeline_config=pipeline_config,
         sample_rate=args.sample_rate,
         annotation_type=args.annotation,
@@ -217,26 +230,37 @@ def _create_export_strategy(
 
 
 def _create_rename_mapping(
-    input_data_types: list[str], rename_input_data_types: list[str] | None
+    data_types: list[str],
+    rename_data_types: list[str] | None,
 ) -> dict[str, str] | None:
-    if rename_input_data_types is None:
+    """Create rename mapping for data types.
+
+    Args:
+        data_types: List of original data type names
+        rename_data_types: List of renamed data type names
+
+    Returns:
+        Dictionary mapping original names to renamed names, or None if no renaming
+    """
+    if rename_data_types is None:
         return None
 
-    if len(input_data_types) != len(rename_input_data_types):
+    if len(data_types) != len(rename_data_types):
         raise ValueError(
-            f"Number of input data types and rename input data types must be the same. "
-            f"Got {len(input_data_types)} input data types and"
-            f" {len(rename_input_data_types)} rename input data types."
+            f"Number of data types and rename data types "
+            f"must be the same. Got {data_types} data types and"
+            f" {rename_data_types} rename data types."
         )
 
-    return dict(zip(input_data_types, rename_input_data_types, strict=True))
+    return dict(zip(data_types, rename_data_types, strict=True))
 
 
 def print_processing_summary(
     args,
     datasets: dict[str, Dataset],
     pipeline_config: PipelineConfig,
-    rename_mapping: dict[str, str] | None,
+    input_rename_mapping: dict[str, str] | None,
+    output_rename_mapping: dict[str, str] | None,
 ):
     """Print a summary of what will be processed"""
     print("\n" + "=" * 60)
@@ -254,12 +278,16 @@ def print_processing_summary(
                 print(f"     Transforms: {len(step.transforms)}")
 
     print(f"\nInput data types: {args.input_data_types}")
-    if rename_mapping:
-        print("Rename mapping:")
-        for original, renamed in rename_mapping.items():
+    if input_rename_mapping:
+        print("Input rename mapping:")
+        for original, renamed in input_rename_mapping.items():
             print(f"  {original} → {renamed}")
 
     print(f"Output data types: {args.output_data_types}")
+    if output_rename_mapping:
+        print("Output rename mapping:")
+        for original, renamed in output_rename_mapping.items():
+            print(f"  {original} → {renamed}")
 
     if args.annotation:
         print(f"Annotations: {args.annotation}")
@@ -293,14 +321,23 @@ def main() -> None:
             _load_pipeline_config(args.pipeline) if args.pipeline else None
         )
 
-        rename_mapping = _create_rename_mapping(
-            args.input_data_types, args.rename_input_data_types
+        input_rename_mapping = _create_rename_mapping(
+            args.input_data_types,
+            args.rename_input_data_types,
+        )
+        output_rename_mapping = _create_rename_mapping(
+            args.output_data_types,
+            args.rename_output_data_types,
         )
 
-        print_processing_summary(args, datasets, pipeline_config, rename_mapping)
+        print_processing_summary(
+            args, datasets, pipeline_config, input_rename_mapping, output_rename_mapping
+        )
 
         # Create export strategy
-        export_strategy = _create_export_strategy(pipeline_config, rename_mapping, args)
+        export_strategy = _create_export_strategy(
+            pipeline_config, input_rename_mapping, output_rename_mapping, args
+        )
 
         # Process each dataset
         print("\n🚀 Starting processing...")
