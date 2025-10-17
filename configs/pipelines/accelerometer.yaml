@@ -1,4 +1,4 @@
-name: accelerometer_processing
+name: accelerometer
 description: "Accelerometer processing pipeline"
 
 steps:

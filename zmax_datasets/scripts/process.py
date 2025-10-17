@@ -3,6 +3,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from zmax_datasets import settings
 from zmax_datasets.datasets.base import Dataset
 from zmax_datasets.datasets.configs import DatasetConfig
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
@@ -143,6 +144,18 @@ def parse_arguments():
         ),
         default=None,
     )
+    parser.add_argument(
+        "--suffix",
+        type=str,
+        help="Suffix to add to output file names",
+        default="",
+    )
+    parser.add_argument(
+        "--output-annotations-period-length",
+        type=int,
+        help="Output annotations period length in seconds",
+        default=settings.DEFAULTS["period_length"],
+    )
 
     return parser.parse_args()
 
@@ -224,6 +237,8 @@ def _create_export_strategy(
         with_sleep_scoring=args.only_with_sleep_scoring,
         catalog_file_name=args.catalog_file_name,
         n_jobs=args.n_jobs,
+        suffix=args.suffix,
+        period_length=args.output_annotations_period_length,
     )
 
     return export_strategy
@@ -299,6 +314,9 @@ def print_processing_summary(
     print(
         f"\nParallel workers: {args.n_jobs if args.n_jobs else 'auto (all CPU cores)'}"
     )
+    if args.suffix:
+        print(f"File suffix: {args.suffix}")
+    print(f"Output annotations period length: {args.output_annotations_period_length}")
     print(f"Output directory: {args.output_dir}")
     print("=" * 60)
 
