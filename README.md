@@ -74,6 +74,10 @@ poetry run sleep-scoring \
 
 For a complete list of options for each script, use `--help`.
 
+## Contributing
+
+See the [contribution doc](CONTRIBUTING) for the complete workflow.
+
 ## License
 
 This project is licensed under the terms of the MIT license.
