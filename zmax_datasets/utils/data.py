@@ -24,17 +24,16 @@ def _validate_channel_names_match(objects: Sequence["ArrayBase"]) -> list[str]:
 
 
 def _validate_channel_names_distinct(objects: Sequence["ArrayBase"]) -> list[str]:
-    channel_names = set()
+    channel_names = []
     for obj in objects:
-        obj_channels = set(obj.channel_names)
-        if intersection := channel_names & obj_channels:
+        if intersection := (set(channel_names) & set(obj.channel_names)):
             raise ValueError(
                 "Channel names must be distinct."
                 f" Duplicate channels found: {intersection}"
             )
-        channel_names.update(obj_channels)
+        channel_names.extend(obj.channel_names)
 
-    return list(channel_names)
+    return channel_names
 
 
 def _validate_timestamps_match(objects: Sequence["TimestampedArray"]) -> np.ndarray:
