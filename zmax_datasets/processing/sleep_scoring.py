@@ -9,7 +9,7 @@ from psg_utils.preprocessing import apply_scaling, quality_control_funcs
 from utime import Defaults
 from utime.hyperparameters import YAMLHParams
 
-from zmax_datasets.transforms.resample import Resample
+from zmax_datasets.transforms.helpers import Resample
 from zmax_datasets.utils.data import Data, get_all_periods
 
 if TYPE_CHECKING:
