@@ -24,6 +24,44 @@ poetry install --with dev --with test --all-extras
 pre-commit install
 ```
 
+### Linting and formatting
+
+This repo uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting. Ruff is also run via `pre-commit` on commits, but you can (and should) run it manually while iterating:
+
+```bash
+# Lint (and apply auto-fixes where possible)
+ruff check . --fix
+
+# Format
+ruff format .
+```
+
+#### Docstrings
+
+Docstrings should follow the **Google** style. References:
+- https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings
+
+Example:
+
+```python
+def bandpass_filter(x: np.ndarray, fs: float, low_hz: float, high_hz: float) -> np.ndarray:
+    """Apply a bandpass filter to a 1D signal.
+
+    Args:
+        x: Input signal (shape: [n_samples]).
+        fs: Sampling frequency in Hz.
+        low_hz: Low cutoff frequency in Hz.
+        high_hz: High cutoff frequency in Hz.
+
+    Returns:
+        The filtered signal (same shape as `x`).
+
+    Raises:
+        ValueError: If cutoff frequencies are invalid.
+    """
+    ...
+```
+
 ## Git Flow
 
 This project uses Git Flow for version control (more information [here](https://davidregalado255.medium.com/what-is-gitflow-b3396770cd42)). The primary branches are:
