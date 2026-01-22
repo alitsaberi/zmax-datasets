@@ -1,17 +1,15 @@
 from loguru import logger
-
-from zmax_datasets.processing.eeg_usability import (
-    get_usability_scores,
-    load_model,
-)
-
-from zmax_datasets.transforms.base import Transform
-from zmax_datasets.utils.data import Data
+import numpy as np
 
 from zmax_datasets.processing.eeg_artifact_detect import (
     run_full_zmax_artifact_pipeline_from_data,
 )
-
+from zmax_datasets.processing.eeg_usability import (
+    get_usability_scores,
+    load_model,
+)
+from zmax_datasets.transforms.base import Transform
+from zmax_datasets.utils.data import Data
 
 
 class EEGUsability(Transform):
@@ -47,18 +45,16 @@ class EEGUsability(Transform):
         )
 
         return usability_scores
-    
-    
-class EEGArtifactDetection(Transform):
-    """
-    Rule-based EEG artifact & usability transform using the full
-    run_full_zmax_artifact_pipeline_from_data pipeline.
 
-    Output:
-        Data with one sample per 30-s epoch:
-        - channel 0: continuous usability score (0–1)
-        - channel 1: binary usability_score (1 if usability > threshold)
-        - channel 2: artifact flag (1 if n_bad_channels > 0)
+
+
+class EEGArtifactDetection(Transform):
+    """Rule-based EEG artifact labeling per 30s epoch.
+
+    Output is one sample per epoch with:
+        - bad_L: 1 if left channel is bad, else 0
+        - bad_R: 1 if right channel is bad, else 0
+        - artifact_any: 1 if either channel is bad, else 0
     """
 
     def __init__(
@@ -66,51 +62,37 @@ class EEGArtifactDetection(Transform):
         left_label: str = "EEG_L",
         right_label: str = "EEG_R",
         epoch_length: float = 30.0,
-        usability_threshold: float = 0.4,
         plot: bool = False,
     ):
         self.left_label = left_label
         self.right_label = right_label
         self.epoch_length = epoch_length
-        self.usability_threshold = usability_threshold
         self.plot = plot
+        
 
     def __call__(self, data: Data) -> Data:
-        # Run your big pipeline (no plotting in production by default)
         out = run_full_zmax_artifact_pipeline_from_data(
             data=data,
             left_label=self.left_label,
             right_label=self.right_label,
             sf=float(data.sample_rate),
-            plot_eeg=self.plot,
-        )
+            plot_eeg=self.plot)
 
-        usability_df = out["usability_df"].copy()
+        bad_L = out["bad_L"]
+        bad_R = out["bad_R"]
 
-        # --- derive binary usability + artifact flags ---
-        usability_df["usability_score"] = (
-            usability_df["usability"] > self.usability_threshold
-        ).astype(int)
+        artifact_any = ((bad_L == 1) | (bad_R == 1)).astype(int)
 
-        usability_df["artifact"] = (usability_df["n_bad_chan"] > 0).astype(int)
+        n_epochs = bad_L.shape[0]
+        n_artifacts = int(artifact_any.sum())
+        logger.info(f"Artifact epochs (any channel bad): {n_artifacts}/{n_epochs}")
 
-        n_epochs = len(usability_df)
-        n_artifacts = int(usability_df["artifact"].sum())
-        logger.info(
-            "Rule-based artifact epochs (any channel bad): "
-            f"{n_artifacts}/{n_epochs}"
-        )
-
-        # Turn into Data object: (n_epochs, 3)
-        arr = usability_df[["usability", "usability_score", "artifact"]].to_numpy()
+        # 3) Pack into Data: (n_epochs, 3)
+        arr = np.column_stack([bad_L, bad_R, artifact_any])
 
         return Data(
             array=arr,
-            sample_rate=1.0 / self.epoch_length,  # 1 sample per 30 s
-            channel_names=[
-                "usability_rb",
-                "usability_rb_bin",
-                "artifact_rb",
-            ],
+            sample_rate=1.0 / self.epoch_length,
+            channel_names=["bad_L", "bad_R", "artifact_any"],
         )
 

@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 Created on Mon Dec 15 12:28:05 2025
 
 @author: selaca
 """
+
 # -*- coding: utf-8 -*-
 """
 Created on Fri Dec  5 10:31:30 2025
@@ -12,73 +12,52 @@ Created on Fri Dec  5 10:31:30 2025
 """
 
 import os
-import sys
 import re
 import warnings
-import mne
-from datetime import timedelta
 from datetime import datetime
-from collections import defaultdict
-import pickle
-import random
-import numpy as np
-import pandas as pd
-from collections import Counter
-
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-from scipy.signal import spectrogram
-import yasa
-from yasa import sleep_statistics
-from yasa import transition_matrix
 from pathlib import Path
-import pandas.api.types as pdt
-from scipy.signal import welch
-from mne.time_frequency import psd_array_welch
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
-from yasa import art_detect
 
-
+import mne
 import numpy as np
 import pandas as pd
-import sys
-from zmax_datasets.transforms.eeg import EEGUsability
-from zmax_datasets.utils.data import Data
+import pandas.api.types as pdt
+
 from zmax_datasets.settings import ARTIFACT_DETECTION
+from zmax_datasets.transforms.eeg import EEGArtifactDetection
+from zmax_datasets.utils.data import Data
 
-from zmax_datasets.transforms.eeg import EEGUsability, EEGArtifactDetection
+INT2LAB = {0: "W", 1: "N1", 2: "N2", 3: "N3", 4: "R"}
+LAB2INT = {v: k for k, v in INT2LAB.items()}
 
-INT2LAB = {0:'W', 1:'N1', 2:'N2', 3:'N3', 4:'R'}
-LAB2INT = {v:k for k, v in INT2LAB.items()}
 
 def read_Zmax_EEG(root):
     """Process only PPG data."""
     eeg_data = {}
-    file_name = ["EEG L","EEG R"]
+    file_name = ["EEG L", "EEG R"]
     for zip_file in extract_zmax_files(root):
-        base_name = os.path.basename(zip_file).split('.edf')[0]
+        base_name = os.path.basename(zip_file).split(".edf")[0]
         if base_name in file_name:
-            if base_name == 'EEG L':
+            if base_name == "EEG L":
                 eeg_data[zip_file] = load_and_preprocess_edf(zip_file)
-            if base_name == 'EEG R':
+            if base_name == "EEG R":
                 eeg_data[zip_file] = load_and_preprocess_edf(zip_file)
     return eeg_data
+
 
 def extract_zmax_files(root):
     """Find all EDF files in buw_zmax_fulldata/*/* directories."""
     zmax_files = []
     for deviceID in os.scandir(root):
-        if deviceID.is_dir() and 'buw_zmax_fulldata' in deviceID.name:
+        if deviceID.is_dir() and "buw_zmax_fulldata" in deviceID.name:
             device_path = os.path.join(root, deviceID.name)
             for session_dir in os.scandir(device_path):
                 if session_dir.is_dir():
                     session_path = os.path.join(device_path, session_dir.name)
                     for entry in os.scandir(session_path):
-                        if entry.is_file() and entry.name.lower().endswith('.edf'):
+                        if entry.is_file() and entry.name.lower().endswith(".edf"):
                             zmax_files.append(os.path.join(session_path, entry.name))
     return zmax_files
+
 
 def load_and_preprocess_edf(file_path, chunk_size=100_000):
     """
@@ -113,8 +92,10 @@ def load_and_preprocess_edf(file_path, chunk_size=100_000):
         return []
 
     # Safety: sampling freq and measurement date
-    sfreq = raw.info.get('sfreq', None)
-    start_time = raw.info.get('meas_date', None) or datetime.fromtimestamp(0)  # fallback epoch if None
+    sfreq = raw.info.get("sfreq", None)
+    start_time = raw.info.get("meas_date", None) or datetime.fromtimestamp(
+        0
+    )  # fallback epoch if None
 
     # Convert to DataFrame
     try:
@@ -128,30 +109,30 @@ def load_and_preprocess_edf(file_path, chunk_size=100_000):
         return []
 
     # Build timestamp; df['time'] is seconds from start
-    if 'time' not in df.columns:
+    if "time" not in df.columns:
         print(f"[WARN] 'time' column missing in DataFrame: {file_path}")
         return []
 
-    df['timestamp'] = start_time + pd.to_timedelta(df['time'], unit='s')
-    df = df.drop(columns=['time'])
+    df["timestamp"] = start_time + pd.to_timedelta(df["time"], unit="s")
+    df = df.drop(columns=["time"])
 
     # Split into chunks
-    chunks = [df.iloc[i:i+chunk_size] for i in range(0, len(df), chunk_size)]
+    chunks = [df.iloc[i : i + chunk_size] for i in range(0, len(df), chunk_size)]
     return chunks
-
 
 
 def _find_timestamp_col(df: pd.DataFrame):
     # common names: timestamp, time, datetime, ts
     for c in df.columns:
         lc = str(c).lower()
-        if lc in ("timestamp","time","datetime","ts"):
+        if lc in ("timestamp", "time", "datetime", "ts"):
             return c
     # fallback: try pandas datetime columns
     for c in df.columns:
         if np.issubdtype(df[c].dtype, np.datetime64):
             return c
     raise ValueError("No timestamp-like column found.")
+
 
 def _find_signal_col(df: pd.DataFrame, target_label: str):
     # e.g., target_label = "EEG L" or "EEG R"
@@ -162,7 +143,10 @@ def _find_signal_col(df: pd.DataFrame, target_label: str):
     numeric = [c for c in df.columns if np.issubdtype(df[c].dtype, np.number)]
     if len(numeric) == 1:
         return numeric[0]
-    raise ValueError(f"No column matching '{target_label}' found and no unique numeric fallback.")
+    raise ValueError(
+        f"No column matching '{target_label}' found and no unique numeric fallback."
+    )
+
 
 def _session_root(path_str: str):
     """
@@ -176,9 +160,10 @@ def _session_root(path_str: str):
     # find the part that looks like 'session_<digits>'
     for i, comp in enumerate(parts):
         if re.fullmatch(r"session_\d+", comp, flags=re.IGNORECASE):
-            return str(Path(*parts[:i+1]))
+            return str(Path(*parts[: i + 1]))
     # if not found, use parent
     return str(p.parent)
+
 
 def combine_sessions(data_by_path: dict, asof_tolerance="10ms"):
     """
@@ -203,19 +188,20 @@ def combine_sessions(data_by_path: dict, asof_tolerance="10ms"):
 
         if left_entry is None or right_entry is None:
             # only one side present; still create a single-side dataframe
-            p, df = (left_entry or right_entry)
+            p, df = left_entry or right_entry
             ts_col = _find_timestamp_col(df)
             side = "EEG L" if left_entry else "EEG R"
             sig_col = _find_signal_col(df, side)
-            out = (df
-                   .rename(columns={ts_col: "timestamp", sig_col: side})
-                   [["timestamp", side]]
-                   .copy())
+            out = df.rename(columns={ts_col: "timestamp", sig_col: side})[
+                ["timestamp", side]
+            ].copy()
             # ensure datetime index (if numeric seconds, convert)
             if not np.issubdtype(out["timestamp"].dtype, np.datetime64):
                 # try parse; if numeric seconds, convert via unit="s"
                 try:
-                    out["timestamp"] = pd.to_datetime(out["timestamp"], utc=True, errors="coerce")
+                    out["timestamp"] = pd.to_datetime(
+                        out["timestamp"], utc=True, errors="coerce"
+                    )
                 except Exception:
                     pass
             combined[sess] = out
@@ -252,17 +238,23 @@ def combine_sessions(data_by_path: dict, asof_tolerance="10ms"):
 
         # asof-join R onto L by nearest timestamp, keep timestamp from L
         L_sorted = L.sort_values("timestamp")
-        R_sorted = R.sort_values("timestamp").rename(columns={"timestamp": "timestamp_R"})
+        R_sorted = R.sort_values("timestamp").rename(
+            columns={"timestamp": "timestamp_R"}
+        )
 
         merged = pd.merge_asof(
-            L_sorted, R_sorted,
-            left_on="timestamp", right_on="timestamp_R",
-            direction="nearest", tolerance=pd.Timedelta(asof_tolerance)
+            L_sorted,
+            R_sorted,
+            left_on="timestamp",
+            right_on="timestamp_R",
+            direction="nearest",
+            tolerance=pd.Timedelta(asof_tolerance),
         ).drop(columns=["timestamp_R"])
 
         combined[sess] = merged[["timestamp", "EEG L", "EEG R"]]
 
     return combined
+
 
 def _to_dt_utc(s: pd.Series) -> pd.Series:
     """Return a tz-aware (UTC) datetime series from mixed inputs."""
@@ -284,21 +276,25 @@ def _to_dt_utc(s: pd.Series) -> pd.Series:
 
     # Fallback: parse strings
     return pd.to_datetime(s, utc=True, errors="coerce")
-def load_data(user_id,pre_id,session_id,root):
-    zmax_eeg_data = read_Zmax_EEG(root)  
+
+
+def load_data(user_id, pre_id, session_id, root):
+    zmax_eeg_data = read_Zmax_EEG(root)
 
     matches = [f for f in zmax_eeg_data.keys() if f"buw_zmax_fulldata_{pre_id}" in f]
     filtered_dict = {k: v for k, v in zmax_eeg_data.items() if k in matches}
     eeg_dfs = {k: pd.concat(v) for k, v in filtered_dict.items()}
     result = combine_sessions(eeg_dfs, asof_tolerance="20ms")
-    eeg = result[f'C:\\Users\\selaca\\Desktop\\data_example_folder\\{user_id}\\buw_zmax_fulldata_{pre_id}\\session_{session_id}']
-    
-    span_s = (eeg['timestamp'].max() - eeg['timestamp'].min()).total_seconds()
+    eeg = result[
+        f"C:\\Users\\selaca\\Desktop\\data_example_folder\\{user_id}\\buw_zmax_fulldata_{pre_id}\\session_{session_id}"
+    ]
+
+    span_s = (eeg["timestamp"].max() - eeg["timestamp"].min()).total_seconds()
 
     # check if it spans at least 30 seconds
     if span_s < 30:
         print(f"Skipping: data too short ({span_s:.2f} s)")
-        return {},[]
+        return {}, []
     else:
         print(f"Data OK: {span_s:.2f} s long")
         return eeg
@@ -307,12 +303,12 @@ def load_data(user_id,pre_id,session_id,root):
 ############## LOAD TEST DATA #############
 sf = ARTIFACT_DETECTION["sampling_frequency"]  # 256
 
-user_id ='HBU0C768628895A922A4'
-pre_id = '1'
-session_id='3'
+user_id = "HBU0C768628895A922A4"
+pre_id = "1"
+session_id = "3"
 root = os.path.join(r"C:\Users\selaca\Desktop\data_example_folder", user_id)
 
-eeg = load_data(user_id,pre_id,session_id,root)
+eeg = load_data(user_id, pre_id, session_id, root)
 
 df = eeg.copy()
 df["timestamp"] = pd.to_datetime(df["timestamp"])
@@ -320,7 +316,7 @@ df = df.set_index("timestamp").sort_index()
 
 # Convert microvolts → volts
 t = (df.index - df.index[0]).total_seconds().to_numpy()
-left = df["EEG L"].to_numpy() 
+left = df["EEG L"].to_numpy()
 right = df["EEG R"].to_numpy()
 
 ############### RUN PIPELINE #############
@@ -334,7 +330,7 @@ data = Data(
 
 ################# STAND ALONE TEST ##############
 from zmax_datasets.processing.eeg_artifact_detect import (
-    run_full_zmax_artifact_pipeline_from_data
+    run_full_zmax_artifact_pipeline_from_data,
 )
 
 results = run_full_zmax_artifact_pipeline_from_data(data=data, sf=256, plot_eeg=True)
@@ -349,9 +345,5 @@ print(usability_df.head())
 rb_transform = EEGArtifactDetection(plot=False)
 rb_data = rb_transform(data)
 
-print(rb_data.shape)          # (n_epochs, 3)
+print(rb_data.shape)  # (n_epochs, 3)
 print(rb_data.channel_names)  # ['usability_rb', 'usability_rb_bin', 'artifact_rb']
-
-
-
-

@@ -6,12 +6,12 @@ authors = ["Ali Saberi <ali.saberi96@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
+python = ">=3.10,<3.11"
 numpy = "~1.23"
 pandas = "^2.2.2"
 mne = "^1.7.1"
 h5py = "^3.11.0"
-scipy = ">=1.10,<2.0"
+scipy = "1.8.1"
 typing-extensions = "^4.12.2"
 pyarrow = "^19.0.1"
 loguru = "^0.7.3"

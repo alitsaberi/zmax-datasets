@@ -78,7 +78,7 @@ def _process_dataset(
     results = []
 
     for i, recording in enumerate(recordings):
-        logger.info(f"-> Recording {i+1}/{n_recordings}: {recording}")
+        logger.info(f"-> Recording {i + 1}/{n_recordings}: {recording}")
 
         data_file_path = data_dir / f"{recording}" / f"{recording}.h5"
 

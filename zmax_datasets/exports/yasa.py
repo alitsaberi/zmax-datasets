@@ -152,7 +152,7 @@ class YasaExportStrategy(ExportStrategy):
     ) -> list[pd.DataFrame]:
         dataset_features = []
         for i, recording in enumerate(dataset.get_recordings(with_sleep_scoring=True)):
-            logger.info(f"-> Recording {i+1}: {recording}")
+            logger.info(f"-> Recording {i + 1}: {recording}")
             try:
                 features = self._extract_features(recording)
                 hypnogram = recording.read_annotations(label_mapping=hypnogram_mapping)
