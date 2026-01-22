@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-
 from zmax_datasets.processing.artifact_detection import get_usability_scores, load_model
 
 

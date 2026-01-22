@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 from loguru import logger
+from zmax_datasets.transforms.filter import FIRFilter
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.zmax import Recording
@@ -15,7 +16,6 @@ from zmax_datasets.processing.sleep_scoring import (
 )
 from zmax_datasets.sources.zmax.enums import DataTypes
 from zmax_datasets.sources.zmax.utils import load_data
-from zmax_datasets.transforms.filter import FIRFilter
 from zmax_datasets.utils.data import Data
 from zmax_datasets.utils.helpers import generate_timestamped_file_name
 from zmax_datasets.utils.logger import setup_logging
@@ -295,7 +295,7 @@ def main() -> None:
     data_types = [DataTypes[channel] for channel in args.channels]
 
     for i, recording in enumerate(recordings):
-        logger.info(f"Processing {i+1}/{len(recordings)}: {recording}")
+        logger.info(f"Processing {i + 1}/{len(recordings)}: {recording}")
 
         try:
             _process_recording(

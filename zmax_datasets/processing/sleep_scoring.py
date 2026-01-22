@@ -319,8 +319,7 @@ def _apply_quality_control(data: Data, quality_control_func: str, **kwargs) -> D
 
     for i, affected_periods in enumerate(indices):
         logger.info(
-            f"Quality control affected {len(affected_periods)}"
-            f" periods in channel {i}"
+            f"Quality control affected {len(affected_periods)} periods in channel {i}"
         )
 
     return data

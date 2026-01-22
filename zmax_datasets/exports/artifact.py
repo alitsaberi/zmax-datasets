@@ -2,12 +2,12 @@ from pathlib import Path
 
 import numpy as np
 from loguru import logger
+from zmax_datasets.processing.artifact_detection import get_usability_scores, load_model
 
 from zmax_datasets import settings
 from zmax_datasets.datasets.base import Dataset, DataTypeMapping, Recording
 from zmax_datasets.exports.base import ExportStrategy
 from zmax_datasets.exports.enums import ErrorHandling, ExistingFileHandling
-from zmax_datasets.processing.artifact_detection import get_usability_scores, load_model
 from zmax_datasets.utils.helpers import remove_tree
 
 
@@ -38,7 +38,7 @@ class ArtifactExportStrategy(ExportStrategy):
     def _export(self, dataset: Dataset, out_dir: Path) -> None:
         prepared_recordings = 0
         for i, recording in enumerate(dataset.get_recordings(with_sleep_scoring=True)):
-            logger.info(f"-> Recording {i+1}: {recording}")
+            logger.info(f"-> Recording {i + 1}: {recording}")
 
             recording_out_dir = out_dir / str(recording)
 
