@@ -126,4 +126,26 @@ SLEEP_SCORING = {
     }
 }
 
+############################# Eye Movement Detection ###########################
+
+EYE_MOVEMENT_DETECTION = {
+    "left_label": "L",
+    "right_label": "R",
+    "low_cutoff": 0.2,
+    "high_cutoff": 10.0,
+    "min_peak_amplitude": 80,
+    "max_peak_amplitude": 550,
+    "min_peak_gap": 0.5,
+    "relative_peak_prominence": 0.7,
+    "max_event_gap": 0.2,
+    "min_event_duration": 0.0,
+    "max_event_duration": 1.2,
+    "min_event_skewness": -0.3,
+    "max_event_skewness": 0.3,
+    "min_sequence_correlation": 0.6,
+    "min_sequence_amplitude_ratio": 0.5,
+    "max_sequence_amplitude_ratio": 2.0,
+    "relative_baseline": 0.05,
+}
+
 ################################################################################
