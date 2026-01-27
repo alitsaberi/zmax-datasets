@@ -499,6 +499,11 @@ class DataType:
     def label(self) -> str:
         return "_".join(self.channel.split(" "))
 
+@dataclass
+class Event:
+    label: str
+    start_time: int
+    end_time: int
 
 def samples_to_timestamped_array(samples: Sequence[Sample]) -> TimestampedArray:
     if len(samples) == 0:
