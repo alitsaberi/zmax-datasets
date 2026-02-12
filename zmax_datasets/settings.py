@@ -137,3 +137,10 @@ EEG_BANDS_HZ = {
 
 EEG_SIGNAL_BAND = (0.5, 30.0)
 
+
+
+
+
+
+
+

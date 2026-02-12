@@ -1,7 +1,7 @@
-from loguru import logger
 import numpy as np
+from loguru import logger
 
-from zmax_datasets.processing.eeg_artifact_detect import (
+from zmax_datasets.processing.eeg.artifact_detection.artifact_detection import (
     run_full_zmax_artifact_pipeline_from_data,
 )
 from zmax_datasets.processing.eeg_usability import (
@@ -48,51 +48,57 @@ class EEGUsability(Transform):
 
 
 
+
 class EEGArtifactDetection(Transform):
-    """Rule-based EEG artifact labeling per 30s epoch.
-
-    Output is one sample per epoch with:
-        - bad_L: 1 if left channel is bad, else 0
-        - bad_R: 1 if right channel is bad, else 0
-        - artifact_any: 1 if either channel is bad, else 0
-    """
-
-    def __init__(
-        self,
-        left_label: str = "EEG_L",
-        right_label: str = "EEG_R",
-        epoch_length: float = 30.0,
-        plot: bool = False,
-    ):
-        self.left_label = left_label
-        self.right_label = right_label
-        self.epoch_length = epoch_length
-        self.plot = plot
-        
+    """Artifact detection transform using run_full_zmax_artifact_pipeline_from_data."""
 
     def __call__(self, data: Data) -> Data:
-        out = run_full_zmax_artifact_pipeline_from_data(
-            data=data,
-            left_label=self.left_label,
-            right_label=self.right_label,
-            sf=float(data.sample_rate),
-            plot_eeg=self.plot)
 
-        bad_L = out["bad_L"]
-        bad_R = out["bad_R"]
+        n_channels = data.n_channels
+        sample_rate = float(data.sample_rate)
 
-        artifact_any = ((bad_L == 1) | (bad_R == 1)).astype(int)
+        # ---- Single channel case ----
+        if n_channels == 1:
+            out = run_full_zmax_artifact_pipeline_from_data(data)
+            bad = out["artifact_epochs"].astype(float)
 
-        n_epochs = bad_L.shape[0]
-        n_artifacts = int(artifact_any.sum())
-        logger.info(f"Artifact epochs (any channel bad): {n_artifacts}/{n_epochs}")
+            logger.info(
+                f"Artifact detection completed: {bad.sum():.0f}/{bad.size} bad epochs"
+            )
 
-        # 3) Pack into Data: (n_epochs, 3)
-        arr = np.column_stack([bad_L, bad_R, artifact_any])
+            return Data(
+                array=bad.reshape(-1, 1),
+                sample_rate=sample_rate,
+                channel_names=[f"bad_epochs_{data.channel_names[0]}"],
+            )
+
+        # ---- Multi-channel case ----
+        bad_cols = []
+
+        for ch_idx, ch_name in enumerate(data.channel_names):
+
+            # create single-channel Data object
+            channel_data = Data(
+                array=data.array[:, ch_idx:ch_idx+1],
+                sample_rate=sample_rate,
+                channel_names=[ch_name],
+                timestamps=data.timestamps,
+            )
+
+            out= run_full_zmax_artifact_pipeline_from_data(channel_data)
+            bad = out["artifact_epochs"].astype(float)
+
+            bad_cols.append(bad)
+
+            logger.info(f"{ch_name}: {bad.sum():.0f}/{bad.size} bad epochs")
+
+        # stack columns
+        bad_matrix = np.column_stack(bad_cols)
 
         return Data(
-            array=arr,
-            sample_rate=1.0 / self.epoch_length,
-            channel_names=["bad_L", "bad_R", "artifact_any"],
+            array=bad_matrix,
+            sample_rate=sample_rate,
+            channel_names=[f"bad_epochs_{ch}" for ch in data.channel_names],
         )
+
 
