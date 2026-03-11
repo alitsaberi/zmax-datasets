@@ -31,6 +31,15 @@ def parse_arguments():
 
     # Dataset configuration
     parser.add_argument(
+        "--input-dir",
+        type=Path,
+        help=(
+            "Base input directory for datasets. "
+            "If set, data_dir defaults to input_dir/name when not set in config."
+        ),
+        default=None,
+    )
+    parser.add_argument(
         "--dataset-config",
         type=Path,
         help="Dataset configuration file (YAML). If not provided, uses default.",
@@ -161,9 +170,15 @@ def parse_arguments():
 
 
 def _load_datasets(
-    config_file: Path, datasets_to_process: list[str] | None
+    config_file: Path,
+    datasets_to_process: list[str] | None,
+    input_dir: Path | None = None,
 ) -> dict[str, Dataset]:
-    """Load and configure datasets"""
+    """Load and configure datasets.
+
+    If input_dir is set and a dataset config has no data_dir, data_dir is set to
+    input_dir / dataset.name.
+    """
 
     # Load dataset configurations
     datasets_config_data = load_yaml_config(config_file)
@@ -182,11 +197,15 @@ def _load_datasets(
         )
 
     # Configure and return datasets
-    return {
-        dataset.name: dataset.configure()
-        for dataset in datasets_config
-        if dataset.name in datasets_to_process
-    }
+    result = {}
+    for dataset in datasets_config:
+        if dataset.name not in datasets_to_process:
+            continue
+        config = dict(dataset.config)
+        if input_dir is not None and "data_dir" not in config:
+            config["data_dir"] = input_dir / dataset.name
+        result[dataset.name] = dataset.dataset(**config)
+    return result
 
 
 def _load_pipeline_config(pipeline_file: Path) -> PipelineConfig:
@@ -332,7 +351,9 @@ def main() -> None:
     logger.info(f"Starting pipeline processing with arguments: {args}")
 
     try:
-        datasets = _load_datasets(args.dataset_config, args.datasets)
+        datasets = _load_datasets(
+            args.dataset_config, args.datasets, input_dir=args.input_dir
+        )
         logger.info(f"Loaded {len(datasets)} datasets")
 
         pipeline_config = (

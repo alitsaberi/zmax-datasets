@@ -28,7 +28,6 @@ from zmax_datasets.utils.exceptions import (
     ChannelDurationMismatchError,
     MissingDataTypeError,
     RawDataReadError,
-    SampleRateNotFoundError,
     SleepScoringFileNotFoundError,
     SleepScoringFileNotSet,
     SleepScoringReadError,
@@ -212,18 +211,7 @@ class USleepExportStrategy(ExportStrategy):
 
             record_info["export_status"] = "success"
 
-        except (
-            MissingDataTypeError,
-            RawDataReadError,
-            SleepScoringReadError,
-            SleepScoringFileNotFoundError,
-            SleepScoringFileNotSet,
-            ChannelDurationMismatchError,
-            SampleRateNotFoundError,
-            FileExistsError,
-            FileNotFoundError,
-            ValueError,
-        ) as e:
+        except Exception as e:
             self._handle_error(e, recording)
             record_info["error_message"] = str(e)
 
@@ -278,18 +266,12 @@ class USleepExportStrategy(ExportStrategy):
                         f"-> Recording {i}/{len(recordings_to_process)}: {recording}"
                     )
 
-                    try:
-                        record_info = future.result()
-                        if record_info["export_status"] == "success":
-                            n_new_processed_recordings += 1
+                    record_info = future.result()
 
-                        # Update catalog after each recording
-                        self._update_catalog(record_info, out_dir)
-
-                    except Exception as e:
-                        logger.error(f"Error processing recording {recording}: {e}")
-                        if self.error_handling == ErrorHandling.RAISE:
-                            raise
+                    if record_info["export_status"] == "success":
+                        n_new_processed_recordings += 1
+                    # Update catalog after each recording
+                    self._update_catalog(record_info, out_dir)
         else:
             # Sequential processing
             logger.info("Processing recordings sequentially")
