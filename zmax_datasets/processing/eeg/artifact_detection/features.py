@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.signal import medfilt
 from scipy.stats import kurtosis
+from scipy.signal import find_peaks
 
 from zmax_datasets.processing.eeg.artifact_detection.constants import (
     DEFAULT_DETREND_WINDOW_SEC,
@@ -155,10 +156,14 @@ def _compute_time_domain_features(
     *,
     eps: float,
 ) -> dict[str, np.ndarray]:
+    
     absX = np.abs(X)
     max_abs = absX.max(axis=1)
     rms = np.sqrt((X**2).mean(axis=1))
     std = X.std(axis=1)
+    
+    median_abs = np.median(absX, axis=1)
+    q95_abs = np.percentile(absX, 95, axis=1)
 
     q_hi = np.percentile(X, ROBUST_PTP_Q_HIGH, axis=1)
     q_lo = np.percentile(X, ROBUST_PTP_Q_LOW, axis=1)
@@ -183,6 +188,8 @@ def _compute_time_domain_features(
 
     return {
         "max_abs": max_abs,
+        "median_abs": median_abs,
+        "q95_abs": q95_abs,
         "rms": rms,
         "std": std,
         "ptp_robust": ptp_robust,
@@ -206,17 +213,19 @@ def _compute_subepoch_flatline_features(
     sub_win = max(sub_win, 1)
     n_sub = T // sub_win
 
-    # defaults
     out = {
         "sub_ptp_max_2s": np.zeros(N, dtype=float),
         "sub_rms_max_2s": np.zeros(N, dtype=float),
         "sub_ptp_min_2s": np.zeros(N, dtype=float),
         "sub_std_min_2s": np.zeros(N, dtype=float),
         "sub_ptp_p10_2s": np.zeros(N, dtype=float),
+        "sub_rms_med_2s": np.zeros(N, dtype=float),
+        "sub_rms_p10_2s": np.zeros(N, dtype=float),
         "flat_frac_2s": np.zeros(N, dtype=float),
         "diff_rms_min_2s": np.zeros(N, dtype=float),
         "uniq_p10_2s": np.zeros(N, dtype=float),
         "stuck_frac_2s": np.zeros(N, dtype=float),
+        "max_block_median_jump": np.zeros(N, dtype=float),
     }
 
     if n_sub <= 0:
@@ -227,13 +236,20 @@ def _compute_subepoch_flatline_features(
     sub_ptp = Xc.max(axis=-1) - Xc.min(axis=-1)  # (N, n_sub)
     sub_rms = np.sqrt((Xc**2).mean(axis=-1))
     sub_std = Xc.std(axis=-1)
+    sub_med = np.median(Xc, axis=-1)
 
     out["sub_ptp_max_2s"] = sub_ptp.max(axis=1)
     out["sub_rms_max_2s"] = sub_rms.max(axis=1)
     out["sub_ptp_min_2s"] = sub_ptp.min(axis=1)
     out["sub_std_min_2s"] = sub_std.min(axis=1)
     out["sub_ptp_p10_2s"] = np.percentile(sub_ptp, 10, axis=1)
+    out["sub_rms_med_2s"] = np.median(sub_rms, axis=1)
+    out["sub_rms_p10_2s"] = np.percentile(sub_rms, 10, axis=1)
     out["flat_frac_2s"] = np.mean(sub_ptp < FLAT_PTP_THRESHOLD, axis=1)
+
+    if n_sub > 1:
+        block_median_jump = np.abs(np.diff(sub_med, axis=1))  # (N, n_sub-1)
+        out["max_block_median_jump"] = np.max(block_median_jump, axis=1)
 
     dXc = np.diff(Xc, axis=-1)
     diff_rms_2s = np.sqrt(np.mean(dXc**2, axis=-1))  # (N, n_sub)
@@ -306,6 +322,13 @@ def epoch_features_from_single_channel_epochs(
         n_fft_sec=n_fft_sec,
         n_overlap_sec=n_overlap_sec,
     )
+    
+    harmonic = _compute_harmonic_features(
+        psd_lin,
+        freqs,
+        fmin=fmin,
+        fmax_psd=fmax_psd,
+    )
 
     spectral = _compute_spectral_features(
         psd_lin,
@@ -350,12 +373,62 @@ def epoch_features_from_single_channel_epochs(
             **spectral,
             "frac_vlf": fraction_vlf,
             **drift,
+            **harmonic,
         }
     )
 
     return df_feat, freqs, psd_lin
 
 
+def _compute_harmonic_features(
+    psd_lin: np.ndarray,
+    freqs: np.ndarray,
+    *,
+    fmin: float,
+    fmax_psd: float,
+) -> dict[str, np.ndarray]:
+    """
+    Compute harmonic-artifact features for a single-channel PSD array.
+
+    Args:
+        psd_lin: Linear PSD array of shape (n_epochs, n_freqs).
+        freqs: Frequency axis of shape (n_freqs,).
+        fmin: Minimum base frequency to consider.
+        fmax_psd: Maximum PSD frequency available.
+
+    Returns:
+        Dict with harmonic_flag, harmonic_f0, harmonic_score, harmonic_n.
+    """
+    n_epochs = psd_lin.shape[0]
+
+    harmonic_flag = np.zeros(n_epochs, dtype=bool)
+    harmonic_f0 = np.full(n_epochs, np.nan, dtype=float)
+    harmonic_score = np.zeros(n_epochs, dtype=float)
+    harmonic_n = np.zeros(n_epochs, dtype=int)
+
+    for epoch_index in range(n_epochs):
+        flag, f0, score, n_h = harmonic_artifact_simple(
+            psd_lin[epoch_index, :],
+            freqs,
+            fmin=max(4.0, fmin),
+            fmax=min(30.0, fmax_psd),
+            min_prom_db=8.0,
+            tol_hz=0.6,
+            min_h2_rel=0.20,
+            min_h3_rel=0.10,
+            min_total_ratio=0.20,
+        )
+        harmonic_flag[epoch_index] = flag
+        harmonic_f0[epoch_index] = f0
+        harmonic_score[epoch_index] = score
+        harmonic_n[epoch_index] = n_h
+
+    return {
+        "harmonic_flag": harmonic_flag,
+        "harmonic_f0": harmonic_f0,
+        "harmonic_score": harmonic_score,
+        "harmonic_n": harmonic_n,
+    }
 
 
 def detrend_median_epochs(
@@ -401,3 +474,96 @@ def detrend_median_epochs(
     # medfilt filters along each dimension; we only want time-axis filtering
     baseline = medfilt(signal, kernel_size=(1, 1, kernel_size))
     return signal - baseline
+
+
+def harmonic_artifact_simple(psd_1d, freqs,
+                             fmin=4.0, fmax=30.0,
+                             min_prom_db=8.0,
+                             tol_hz=0.6,
+                             min_h2_rel=0.20,
+                             min_h3_rel=0.10,
+                             min_total_ratio=0.20):
+    """
+    Stricter harmonic detector:
+    requires peaks near f0, 2*f0, 3*f0, and requires harmonics
+    to carry enough power relative to the base and total band power.
+    """
+    out_flag = False
+    out_f0 = np.nan
+    out_score = 0.0
+    out_n = 0
+
+    m = (freqs >= fmin) & (freqs <= fmax)
+    f = freqs[m]
+    p = psd_1d[m]
+
+    if len(f) < 10 or not np.all(np.isfinite(p)):
+        return out_flag, out_f0, out_score, out_n
+
+    p_db = 10 * np.log10(np.maximum(p, 1e-30))
+    peaks, props = find_peaks(p_db, prominence=min_prom_db)
+    if len(peaks) < 3:
+        return out_flag, out_f0, out_score, out_n
+
+    peak_f = f[peaks]
+    peak_prom = props["prominences"]
+    peak_pow = p[peaks]
+
+    best_score = -np.inf
+    best_f0 = np.nan
+    best_n = 0
+    best_flag = False
+
+    total_pow = np.sum(p)
+
+    for i, f0 in enumerate(peak_f):
+        if not (4.0 <= f0 <= 10.0):
+            continue
+
+        # fundamental
+        p1 = peak_pow[i]
+        score = float(peak_prom[i])
+        count = 1
+
+        # find 2nd harmonic
+        j2 = np.where(np.abs(peak_f - 2 * f0) <= tol_hz)[0]
+        if len(j2) == 0:
+            continue
+        j2 = j2[np.argmax(peak_prom[j2])]
+        p2 = peak_pow[j2]
+        score += float(peak_prom[j2])
+        count += 1
+
+        # find 3rd harmonic
+        j3 = np.where(np.abs(peak_f - 3 * f0) <= tol_hz)[0]
+        if len(j3) == 0:
+            continue
+        j3 = j3[np.argmax(peak_prom[j3])]
+        p3 = peak_pow[j3]
+        score += float(peak_prom[j3])
+        count += 1
+
+        # relative harmonic strength
+        h2_rel = p2 / max(p1, 1e-30)
+        h3_rel = p3 / max(p1, 1e-30)
+        total_ratio = (p1 + p2 + p3) / max(total_pow, 1e-30)
+
+        flag = (
+            (h2_rel >= min_h2_rel) &
+            (h3_rel >= min_h3_rel) &
+            (total_ratio >= min_total_ratio)
+        )
+
+        if flag and ((count > best_n) or (count == best_n and score > best_score)):
+            best_flag = True
+            best_n = count
+            best_score = score
+            best_f0 = f0
+
+    if best_flag:
+        out_flag = True
+        out_f0 = float(best_f0)
+        out_score = float(best_score)
+        out_n = int(best_n)
+
+    return out_flag, out_f0, out_score, out_n

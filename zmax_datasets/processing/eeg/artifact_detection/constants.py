@@ -61,14 +61,9 @@ NOTCH_FREQ = 50
 PHYS_BAND = (0.3,35.0)
 VLF_BAND = (0.05, 35.0)
 
-
-FEATURES = ["sub_ptp_max_2s", 
-            "ptp_robust", 
-            "max_abs", 
-            "mean_abs_diff", 
-            "max_cusum"]
-
-GUARD_COLUMNS = ["frac_delta", "frac_beta", "frac_vlf", "ptp_ratio", "zcr"]
+FEATURES = ["sub_ptp_max_2s", "ptp_robust", "max_abs", "mean_abs_diff", "max_cusum", "max_block_median_jump"]
+GUARD_COLS = ["frac_delta", "frac_beta", "frac_vlf", "ptp_ratio", "zcr"]
+LOW_AMP_THR = 5e-6  
 
 # Percentile rates from the distribution plots 
 FEATURE_RATES = {

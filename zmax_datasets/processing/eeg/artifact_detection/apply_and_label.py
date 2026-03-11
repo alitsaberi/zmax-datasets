@@ -6,7 +6,7 @@ from zmax_datasets.processing.eeg.artifact_detection.constants import (
     EPS,
     FEATURES,
     FRACTION_VLF,
-    GUARD_COLUMNS,
+    GUARD_COLS,
     K1,
     K2,
     MIN_KEEP,
@@ -17,6 +17,7 @@ from zmax_datasets.processing.eeg.artifact_detection.constants import (
     READMIT_DELTA,
     TAIL_QUANTILE,
     ZERO_CROSSING_RATE,
+    LOW_AMP_THR
 )
 from zmax_datasets.processing.eeg.artifact_detection.thresholds import (
     calculate_quiet_thresholds_per_channel,
@@ -115,59 +116,90 @@ def build_info(
     dfp: pd.DataFrame,
     features: list[str],
     *,
+    n_epochs: int | None = None,
+    epoch_col: str = "epoch",
     bad_col: str = "bad_independent",
     flatline_col: str = "_bad_flatline_2s",
     flatline_label: str = "FLATLINE_2s",
+    flat_stuck_col: str = "_bad_flatline_stuck",
+    flat_stuck_label: str = "FLAT_STUCK",
+    low_amp_col: str = "_bad_low_amp_flat",
+    low_amp_label: str = "LOW_AMP_FLAT",
+    harmonic_col: str = "_bad_harmonic_artifact",
+    harmonic_label: str = "HARMONIC_ARTIFACT",
+    break_col: str = "_bad_break_artifact",
+    break_label: str = "BREAK_ARTIFACT",
     prefix_good: str = "IND_GOOD",
     prefix_bad: str = "IND_BAD",
     include_hits_when_good: bool = True,
 ) -> np.ndarray:
-    """Build per-epoch info strings for plotting.
+    """
+    Build per-epoch info strings for plotting for a single channel.
 
-    Produces one string per epoch for a single-channel dfp.
-
-    Rules:
+    Replicates the old behavior:
       - hits = features whose `_bad_<feature>` is True
-      - optionally add FLATLINE_2s if `flatline_col` is True
+      - add FLAT_STUCK / LOW_AMP_FLAT / FLATLINE_2s / HARMONIC_ARTIFACT / BREAK_ARTIFACT
       - if `bad_col` is True => "IND_BAD: <hits or UNKNOWN>"
-      - else => "IND_GOOD" (optionally with "(hits: ...)" if include_hits_when_good)
+      - else => "IND_GOOD" or "IND_GOOD (hits: ...)"
 
     Missing columns are treated as False.
+
+    Args:
+        dfp: Single-channel dataframe with one row per epoch.
+        features: Feature names like ["sub_ptp_max_2s", ...].
+        n_epochs: If provided, reindex to [0, ..., n_epochs-1]. If None, use epochs present in dfp.
+
+    Returns:
+        np.ndarray of shape (n_epochs,) if n_epochs is provided, else (n_present_epochs,).
     """
-    # Ensure epoch order and integer epoch index
-    sub = dfp.sort_values("epoch").set_index("epoch")
+    sub = dfp.sort_values(epoch_col).set_index(epoch_col)
 
-    # Build output over all epochs present in dfp
-    epochs = sub.index.to_numpy()
-    msgs = np.empty(len(epochs), dtype=object)
+    if n_epochs is None:
+        epoch_index = pd.Index(sub.index.unique().sort_values())
+    else:
+        epoch_index = pd.Index(np.arange(n_epochs))
 
-    bad_flag = sub.get(bad_col, False)
-    if not isinstance(bad_flag, pd.Series):
-        bad_flag = pd.Series(False, index=sub.index)
+    sub = sub.reindex(epoch_index)
 
-    flat_flag = sub.get(flatline_col, False)
-    if not isinstance(flat_flag, pd.Series):
-        flat_flag = pd.Series(False, index=sub.index)
+    msgs = np.empty(len(epoch_index), dtype=object)
+    msgs[:] = ""
 
-    # Ensure booleans and fill NaNs
-    bad_flag = bad_flag.fillna(False).astype(bool)
-    flat_flag = flat_flag.fillna(False).astype(bool)
-
-    # Precompute feature flags safely
-    feat_flags: dict[str, pd.Series] = {}
-    for f in features:
-        col = f"_bad_{f}"
-        s = sub.get(col, False)
+    def _get_bool_series(col_name: str) -> pd.Series:
+        s = sub.get(col_name, False)
         if not isinstance(s, pd.Series):
             s = pd.Series(False, index=sub.index)
-        feat_flags[f] = s.fillna(False).astype(bool)
+        return s.fillna(False).astype(bool)
 
-    for i, e in enumerate(epochs):
-        hits = [f for f in features if bool(feat_flags[f].loc[e])]
-        if bool(flat_flag.loc[e]):
+    bad_flag = _get_bool_series(bad_col)
+    flat_flag = _get_bool_series(flatline_col)
+    flat_stuck_flag = _get_bool_series(flat_stuck_col)
+    low_amp_flag = _get_bool_series(low_amp_col)
+    harmonic_flag = _get_bool_series(harmonic_col)
+    break_flag = _get_bool_series(break_col)
+
+    feat_flags: dict[str, pd.Series] = {}
+    for feature in features:
+        feat_flags[feature] = _get_bool_series(f"_bad_{feature}")
+
+    for i, epoch in enumerate(epoch_index):
+        hits = [feature for feature in features if bool(feat_flags[feature].loc[epoch])]
+
+        # Match old precedence/behavior
+        if bool(flat_stuck_flag.loc[epoch]):
+            hits.append(flat_stuck_label)
+
+        if bool(low_amp_flag.loc[epoch]):
+            hits.append(low_amp_label)
+        elif bool(flat_flag.loc[epoch]):
             hits.append(flatline_label)
 
-        if bool(bad_flag.loc[e]):
+        if bool(harmonic_flag.loc[epoch]):
+            hits.append(harmonic_label)
+
+        if bool(break_flag.loc[epoch]):
+            hits.append(break_label)
+
+        if bool(bad_flag.loc[epoch]):
             msgs[i] = f"{prefix_bad}: {','.join(hits) if hits else 'UNKNOWN'}"
         else:
             if include_hits_when_good and hits:
@@ -267,6 +299,8 @@ def _get_bad_epochs(
         | dfp["_bad_flatline_2s"]
         | dfp["_bad_step_hard"]
         | dfp["_bad_near"]
+        | dfp["_bad_harmonic_artifact"]
+        | dfp["_bad_break_artifact"]
     )
     
    
@@ -304,14 +338,16 @@ def _add_feature_flags_single_channel(
     Raises:
         ValueError: If df_feat contains multiple channels or thresholds are missing.
     """
+    
     features = FEATURES or [
     "sub_ptp_max_2s",
     "ptp_robust",
     "max_abs",
     "mean_abs_diff",
     "max_cusum",
+    "max_block_median_jump"
     ]
-    guard_columns = GUARD_COLUMNS or [
+    guard_columns = GUARD_COLS or [
         "frac_delta",
         "frac_beta",
         "frac_vlf",
@@ -324,29 +360,44 @@ def _add_feature_flags_single_channel(
         raise InvalidChannelCountError(len(channels))
     ch = channels[0]
 
-    dfp = df_feat[[
-        "epoch", "channel",
-        *features,
-        *guard_columns,
-        "stuck_frac_2s",          # <-- ADD THIS
-        "diff_rms_min_2s",
-        "uniq_p10_2s",
-    ]].copy()
-    
-    num_cols = features + guard_columns + [
+    sel_cols = [
+    "epoch", "channel",
+    *features,
+    *guard_columns,
     "stuck_frac_2s",
     "diff_rms_min_2s",
     "uniq_p10_2s",
+    "harmonic_flag",
+    "harmonic_f0",
+    "harmonic_score",
+    "harmonic_n",
     ]
-
+    sel_cols = list(dict.fromkeys(sel_cols))
+    
+    dfp = df_feat[sel_cols].copy()
+    
+    num_cols = [c for c in sel_cols if c not in ["epoch", "channel"]]
     dfp[num_cols] = dfp[num_cols].apply(pd.to_numeric, errors="coerce")
     
-    #Additional flatline metric
-    dfp["_bad_flatline_2s"] = (
+    # Additional flatline metric
+    dfp["_bad_flatline_stuck"] = (
         (dfp["stuck_frac_2s"] >= 0.50) &          # e.g., >= 3 of 6 windows stuck
         (dfp["diff_rms_min_2s"] <= 0.05e-6) &     # confirms near-constant
         (dfp["uniq_p10_2s"] <= 8)                 # confirms quantized / stuck
     )
+    
+    # ---- simple absolute low-amplitude detector ----
+    dfp["_bad_low_amp_flat"] = dfp["ptp_robust"] < LOW_AMP_THR
+    
+    
+    # combined flatline-like detector
+    dfp["_bad_flatline_2s"] = dfp["_bad_flatline_stuck"] | dfp["_bad_low_amp_flat"]
+    
+    # ---- harmonic artifact detector ----
+    dfp["_bad_harmonic_artifact"] = (
+        dfp["harmonic_flag"].fillna(False).astype(bool)
+    )
+    
     
     # thresholds wide (index=channel, columns=feature)
     thr_wide = threshold_final.pivot(
@@ -365,5 +416,9 @@ def _add_feature_flags_single_channel(
 
         thr = float(thr_wide.loc[ch, f])
         dfp[f"_bad_{f}"] = dfp[f].values > thr
+    
+    # break / disconnect artifact: make block-median jump a hard rule
+    dfp["_bad_break_artifact"] = dfp["_bad_max_block_median_jump"]
+    
 
     return dfp, thr_wide
