@@ -48,10 +48,12 @@ class ECGPeaks(Transform):
         peak_detection_method: str = PeakDetectionMethod.NEUROKIT,
         correct_artifacts: bool = False,
         fix_inversion: bool = True,
+        **kwargs,
     ):
         self.peak_detection_method = peak_detection_method
         self.correct_artifacts = correct_artifacts
         self.fix_inversion = fix_inversion
+        self.kwargs = kwargs
 
     def __call__(self, data: Data) -> Data:
         if data.n_channels != 1:
@@ -81,6 +83,7 @@ class ECGPeaks(Transform):
             sampling_rate=int(data.sample_rate),
             method=self.peak_detection_method,
             correct_artifacts=self.correct_artifacts,
+            **self.kwargs,
         )
 
         array = np.array([ecg_cleaned, peaks["ECG_R_Peaks"].values]).T
