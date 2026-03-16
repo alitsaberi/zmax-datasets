@@ -2,7 +2,7 @@ import math
 from typing import Literal
 
 import numpy as np
-from mne.filter import filter_data
+from mne.filter import filter_data, notch_filter
 from scipy.signal import resample_poly
 from sklearn.preprocessing import (
     MaxAbsScaler,
@@ -113,6 +113,44 @@ class FIRFilter(Transform):
                 self.high_cutoff,
                 **kwargs,
             ).T,
+            sample_rate=data.sample_rate,
+            channel_names=data.channel_names,
+            timestamps=data.timestamps,
+        )
+
+
+class NotchFilter(Transform):
+    """
+    Apply a notch (band-stop) filter to remove power-line interference (e.g. 50/60 Hz).
+
+    This uses MNE's `notch_filter`, and follows the same channel convention as
+    `FIRFilter`: internally it transposes to (n_channels, n_times).
+
+    Args:
+        frequencies: Frequency or list of frequencies to notch (Hz).
+        notch_widths: Width(s) of the stop band(s) in Hz. If None, MNE will choose
+            a reasonable default.
+    """
+
+    def __init__(
+        self,
+        frequencies: float | list[float],
+        notch_widths: float | list[float] | None = None,
+    ):
+        self.frequencies = frequencies
+        self.notch_widths = notch_widths
+
+    def __call__(self, data: Data, **kwargs) -> Data:
+        filtered = notch_filter(
+            data.array.T,
+            data.sample_rate,
+            freqs=self.frequencies,
+            notch_widths=self.notch_widths,
+            **kwargs,
+        ).T
+
+        return Data(
+            array=filtered,
             sample_rate=data.sample_rate,
             channel_names=data.channel_names,
             timestamps=data.timestamps,

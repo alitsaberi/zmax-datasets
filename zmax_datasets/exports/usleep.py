@@ -170,7 +170,7 @@ class USleepExportStrategy(ExportStrategy):
         logger.info(f"Processing recording: {recording_id}")
 
         # Set up recording directory
-        out_dir_path = out_dir / recording_id
+        out_dir_path = out_dir / f"{recording_id}{self.suffix}"
 
         # Initialize record info for catalog
         record_info = {
@@ -201,13 +201,14 @@ class USleepExportStrategy(ExportStrategy):
             record_info.update(data_info)
 
             # 4. Export annotations
-            if ANNOTATIONS_DATA_TYPE in data_types:
-                annotations = data_types.pop(ANNOTATIONS_DATA_TYPE)
+            for data_type, data in data_types.items():
+                if data_type.startswith(ANNOTATIONS_DATA_TYPE):
+                    suffix = data_type.replace(ANNOTATIONS_DATA_TYPE, "")
 
-            annotation_info = self._write_hypnogram(
-                annotations, out_dir_path, recording, hypnogram_mapping
-            )
-            record_info.update(annotation_info)
+                    annotation_info = self._write_hypnogram(
+                        data, out_dir_path, recording, hypnogram_mapping, suffix
+                    )
+                    record_info.update(annotation_info)
 
             record_info["export_status"] = "success"
 
@@ -419,7 +420,7 @@ class USleepExportStrategy(ExportStrategy):
         # Apply resampling if specified (skip sleep_stage)
         if self._resample:
             for data_type, data in data_types.items():
-                if data_type != ANNOTATIONS_DATA_TYPE:
+                if not data_type.startswith(ANNOTATIONS_DATA_TYPE):
                     data_types[data_type] = self._resample(data)
 
         return data_types
@@ -444,7 +445,7 @@ class USleepExportStrategy(ExportStrategy):
 
         out_file_path = (
             recording_out_dir
-            / f"{recording}{self.suffix}.{settings.USLEEP['data_types_file_extension']}"
+            / f"{recording_out_dir.name}.{settings.USLEEP['data_types_file_extension']}"
         )
 
         if not _handle_existing_file(out_file_path, self.existing_data_file_handling):
@@ -543,6 +544,7 @@ class USleepExportStrategy(ExportStrategy):
         recording_out_dir: Path,
         recording: Recording,
         label_mapping: dict[int, str] | None = None,
+        suffix: str = "",
     ) -> dict[str, Any]:
         """Write hypnogram to file in IDS format and calculate stats.
 
@@ -551,20 +553,22 @@ class USleepExportStrategy(ExportStrategy):
             recording_out_dir: Directory to write hypnogram to
             recording: Recording being processed
             label_mapping: Optional mapping from numeric to string labels
+            suffix: Suffix to add to the hypnogram file name
 
         Returns:
             Dictionary with annotation stats
         """
-        annotation_info = {"has_annotations": False}
+        annotation_info = {f"has{suffix}_annotations": False}
 
         if annotations is None:
             return annotation_info
 
         logger.info("Writing hypnogram...")
-        out_file_path = (
-            recording_out_dir
-            / f"{recording}{self.suffix}.{settings.USLEEP['hypnogram_file_extension']}"
+        hypnogram_file_name = (
+            f"{recording_out_dir.name}{suffix}"
+            f".{settings.USLEEP['hypnogram_file_extension']}"
         )
+        out_file_path = recording_out_dir / hypnogram_file_name
 
         if not _handle_existing_file(
             out_file_path, self.existing_annotation_file_handling
@@ -572,13 +576,13 @@ class USleepExportStrategy(ExportStrategy):
             return annotation_info
 
         # Calculate annotation stats
-        annotation_info["has_annotations"] = True
+        annotation_info[f"has{suffix}_annotations"] = True
         annotations_array = annotations.array.squeeze()
         # Use default mapping if none provided
         mapping = label_mapping or settings.DEFAULTS["hypnogram_mapping"]
         for label in mapping.values():
             label_count = np.sum(annotations_array == label)
-            annotation_info[f"{label}_count"] = int(label_count)
+            annotation_info[f"{label}{suffix}_count"] = int(label_count)
 
         # Convert to IDS format and write
         initials, durations, stages = ndarray_to_ids_format(

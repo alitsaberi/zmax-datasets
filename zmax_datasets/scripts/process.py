@@ -156,7 +156,7 @@ def parse_arguments():
     parser.add_argument(
         "--suffix",
         type=str,
-        help="Suffix to add to output file names",
+        help="Suffix to add to output file/directory names",
         default="",
     )
     parser.add_argument(
