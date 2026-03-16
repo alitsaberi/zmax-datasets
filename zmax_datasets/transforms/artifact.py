@@ -1,3 +1,6 @@
+import math
+from typing import Literal
+
 import numpy as np
 from loguru import logger
 
@@ -142,4 +145,95 @@ class IBIArtifactLabels(Transform):
             sample_rate=1
             / self.segment_duration,  # Score rate matches segment duration
             channel_names=["artifact_label"],
+        )
+
+
+class AggregateArtifactMask(Transform):
+    """
+    Aggregate artifact mask labels over longer windows.
+
+    This is intended for cases where you already have an artifact mask
+    at a coarser rate (e.g. one label per 10 seconds, sample_rate=0.1 Hz)
+    and want to aggregate multiple consecutive labels into a single label
+    (e.g. 30-second labels from 10-second labels).
+
+    The new sample rate will be:
+        data.sample_rate / window_size
+    so that if you pass window_size=3 for 10s labels (0.1 Hz), you get 30s
+    labels at ~0.0333 Hz (one label per 30 seconds).
+    """
+
+    def __init__(
+        self,
+        window_size: int,
+        strategy: Literal["first", "last", "majority"] = "majority",
+        ignore_last_window: bool = True,
+    ):
+        """
+        Args:
+            window_size: Number of consecutive labels to aggregate
+                (e.g. 3 to go from 10s labels to 30s labels).
+            strategy: How to aggregate labels within each window:
+                - "first": use the first label in the window
+                - "last": use the last label in the window
+                - "majority": use the most frequent value in the window
+            ignore_last_window: If True, drop the last incomplete window.
+        """
+        if window_size < 1:
+            raise ValueError(f"window_size must be >= 1, got {window_size}")
+        self.window_size = window_size
+        self.strategy = strategy
+        self.ignore_last_window = ignore_last_window
+
+    def _aggregate_window(self, window: np.ndarray) -> np.ndarray:
+        if self.strategy == "first":
+            return window[0]
+        if self.strategy == "last":
+            return window[-1]
+
+        # "majority" vote per channel
+        # window shape: (window_size, n_channels)
+        aggregated = np.empty(window.shape[1], dtype=window.dtype)
+        for ch in range(window.shape[1]):
+            values, counts = np.unique(window[:, ch], return_counts=True)
+            aggregated[ch] = values[np.argmax(counts)]
+        return aggregated
+
+    def __call__(self, data: Data) -> Data:
+        """
+        Aggregate artifact mask labels along the time axis.
+
+        Expects `data.array` of shape (n_time, n_channels), where channels
+        contain artifact mask labels (e.g. 0/1 or categorical).
+        """
+        n_samples, _ = data.array.shape
+        window_size = self.window_size
+
+        if self.ignore_last_window:
+            n_windows = n_samples // window_size
+        else:
+            n_windows = math.ceil(n_samples / window_size)
+
+        if n_windows == 0:
+            raise ValueError(
+                "Not enough samples to form a single window with "
+                f"window_size={window_size} (n_samples={n_samples})"
+            )
+
+        aggregated = []
+        for i in range(n_windows):
+            start = i * window_size
+            end = min(start + window_size, n_samples)
+            if end - start < window_size and self.ignore_last_window:
+                break
+            window = data.array[start:end]
+            aggregated.append(self._aggregate_window(window))
+
+        aggregated_array = np.stack(aggregated, axis=0)
+
+        return Data(
+            array=aggregated_array,
+            sample_rate=data.sample_rate / window_size,
+            channel_names=data.channel_names,
+            timestamp_offset=data.timestamps[0],
         )
